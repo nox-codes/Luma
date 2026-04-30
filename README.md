@@ -9,11 +9,11 @@
 A native macOS AI teaching assistant that lives beside your cursor.
 Watches your screen, guides you step by step, and teaches you anything — right where you work.
 
-![macOS](https://img.shields.io/badge/macOS-14.0%2B-black?style=flat-square)
-![Swift](https://img.shields.io/badge/Swift-5.9-black?style=flat-square)
-![Claude](https://img.shields.io/badge/Powered%20by-Claude%20AI-black?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-black?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.0-green?style=flat-square)
+![macOS](https://img.shields.io/badge/macOS-14.0%2B-black)
+![Swift](https://img.shields.io/badge/Swift-5.9-black)
+![Claude](https://img.shields.io/badge/Powered%20by-Claude%20AI-black)
+![License](https://img.shields.io/badge/License-MIT-black)
+![Status](https://img.shields.io/badge/Status-v0.5.0-blue)
 
 <!--Going to add Actual demo gif soon-->
 <!--<img src="assets/1024-mac.png" alt="Luma/Click Logo" width="480" />-->
