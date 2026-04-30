@@ -28,27 +28,71 @@ Watches your screen, guides you step by step, and teaches you anything — right
 | Requirement | Details |
 |---|---|
 | Mac | Apple Silicon or Intel, macOS 14.0 (Sonoma) or later |
-| Xcode | Version 15 or later — free from the Mac App Store |
-| API key | A free key from [OpenRouter](https://openrouter.ai) is enough to get started |
+| API key | An Anthropic key from [console.anthropic.com](https://console.anthropic.com) |
 | Internet | Only needed for API calls — all on-device features work offline |
 
 > **Not sure which macOS version you have?** Click the Apple logo in the top-left corner → "About This Mac". The version number is shown there.
 
 ---
 
-### Step 1 — Get a free API key
+### Step 1 — Get an API key
 
-You need an API key so Luma can talk to an AI model. The easiest option is OpenRouter, which has a completely free tier.
+Luma uses Claude as its AI brain. You'll need an Anthropic API key to get started.
 
-1. Go to [openrouter.ai](https://openrouter.ai) and create a free account.
-2. Go to **Keys** in your account dashboard and create a new key.
-3. Copy the key — it starts with `sk-or-...`. Keep it somewhere safe for now.
+1. Go to [console.anthropic.com](https://console.anthropic.com) and create an account.
+2. Go to **API Keys** in the dashboard and create a new key.
+3. Copy the key — it starts with `sk-ant-...`. Keep it somewhere safe for now.
 
-> If you already have an Anthropic, Google AI, or any OpenAI-compatible key, those work too — you can set those up during onboarding.
+**Recommended model:** `claude-sonnet-4-6` — fast, capable, and great for both voice responses and walkthroughs.
+
+> **Prefer a free option?** OpenRouter has a free tier that works with Luma. Create a key at [openrouter.ai](https://openrouter.ai) and use the model `google/gemini-2.5-flash:free`. The experience is solid, but Claude gives noticeably better results for walkthroughs and reasoning.
 
 ---
 
-### Step 2 — Install Xcode
+### Step 1b — Install Claude Code (for Agent Mode)
+
+Luma's agent system is most powerful when the **Claude Code CLI** is installed. Agents use it to run real tasks on your computer — writing code, running commands, managing files — all in the background while you keep working.
+
+1. Make sure you have [Node.js](https://nodejs.org) installed (version 18 or later).
+2. Open Terminal and run:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+3. Sign in with your Anthropic account:
+
+```bash
+claude
+```
+
+That's it. Luma auto-detects the CLI on launch. If it's installed, agents use it automatically. If not, Luma falls back to its built-in API runtime — agent mode still works, just without the full computer-use toolset.
+
+> You only need to do this once. After signing in, the CLI stays authenticated.
+
+---
+
+### Step 2 — Download and install Luma ⭐ Recommended
+
+The easiest way to get Luma running. No Xcode, no terminal, no build steps.
+
+1. Go to the [Releases](https://github.com/Omoju-Mayowa/luma/releases) page on GitHub.
+2. Find the latest release and download the `.dmg` file under **Assets**.
+3. Open the downloaded `.dmg` file.
+4. Drag **Luma** into your **Applications** folder.
+5. Open Luma from your Applications folder or Spotlight (`Cmd + Space`, type "Luma").
+
+> **macOS may say the app is from an unidentified developer.** If that happens: go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the Luma entry.
+
+That's it — skip ahead to **Step 5 (Complete onboarding)** below.
+
+---
+
+### Alternative — Build from source (for developers)
+
+If you want to modify Luma or run it directly from the source code, follow these steps instead. You'll need Xcode.
+
+### Step 3 — Install Xcode
 
 If you don't have Xcode installed:
 
@@ -115,7 +159,7 @@ The wizard walks you through 5 quick steps:
 | Welcome | Read the intro, click Continue |
 | Username | Enter a display name — this is just shown locally |
 | PIN (optional) | Set a 6-digit PIN to lock your settings, or skip |
-| API Profile | Paste your OpenRouter key. Set the base URL to `https://openrouter.ai/api/v1` and pick a model (recommend `google/gemini-2.5-flash:free` for free usage) |
+| API Profile | Paste your Anthropic key. Set the base URL to `https://api.anthropic.com/v1` and pick `claude-sonnet-4-6`. If using OpenRouter instead, set the base URL to `https://openrouter.ai/api/v1` and pick `google/gemini-2.5-flash:free` |
 | Permissions | Grant Microphone, Screen Recording, and Accessibility access when prompted |
 
 > **Why does Luma need these permissions?**
@@ -339,12 +383,12 @@ Summary stored for use in next follow-up prompt
 
 | Provider | Auth Header | Free Tier | Recommended Model |
 |---|---|---|---|
+| Anthropic | `x-api-key` | ❌ No | `claude-sonnet-4-6` ⭐ |
 | OpenRouter | `Authorization: Bearer` | ✅ Yes | `google/gemini-2.5-flash:free` |
-| Anthropic | `x-api-key` | ❌ No | `claude-sonnet-4-6` |
 | Google AI | `Authorization: Bearer` | ✅ Yes | `gemini-2.5-flash` |
 | Custom | `Authorization: Bearer` | Depends | Any OpenAI-compatible endpoint |
 
-**Recommended free setup:** OpenRouter with `google/gemini-2.5-flash:free` — zero cost, solid reasoning, fast responses.
+**Recommended setup:** Anthropic with `claude-sonnet-4-6` — best results for walkthroughs, reasoning, and agent tasks. If you want a free option, OpenRouter with `google/gemini-2.5-flash:free` is a solid alternative.
 
 ---
 
