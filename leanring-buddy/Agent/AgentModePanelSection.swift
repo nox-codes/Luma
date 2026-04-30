@@ -166,11 +166,22 @@ struct AgentModePanelSection: View {
                 .foregroundColor(DS.Colors.textTertiary)
                 .kerning(0.45)
 
-            Text(inlineAgentResponseText ?? inlineAgentPlaceholder)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(DS.Colors.textPrimary)
-                .lineLimit(5)
-                .fixedSize(horizontal: false, vertical: true)
+            // Use RichMarkdownView when a response is ready so tables, code blocks,
+            // lists, headers, and blockquotes all render correctly. Falls back to a
+            // plain status placeholder while the agent is still working.
+            if let responseText = inlineAgentResponseText {
+                ScrollView(.vertical, showsIndicators: false) {
+                    RichMarkdownView(text: responseText, accentColor: session.glowColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 260)
+            } else {
+                Text(inlineAgentPlaceholder)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+                    .lineLimit(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
@@ -249,35 +260,35 @@ struct AgentModePanelSection: View {
                 .foregroundColor(DS.Colors.textTertiary)
                 .kerning(0.45)
 
-            Text(card.truncatedText)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(DS.Colors.textPrimary)
-                .lineLimit(5)
-                .fixedSize(horizontal: false, vertical: true)
+            // Full rich markdown rendering — same pipeline as the agent bubble dock card.
+            // Tables, code blocks, headers, lists, and blockquotes all render correctly here.
+            ScrollView(.vertical, showsIndicators: false) {
+                RichMarkdownView(text: card.rawText, accentColor: session.glowColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 240)
 
             if !card.suggestedActions.isEmpty {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     ForEach(card.suggestedActions, id: \.self) { action in
-                        Button(action) {
-                            runSuggestedNextAction(action)
+                        Button(action: { runSuggestedNextAction(action) }) {
+                            Text(action)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(DS.Colors.accentText)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                         }
                         .buttonStyle(.plain)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(DS.Colors.accentText)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
                         .background(DS.Colors.accent.opacity(0.12))
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(DS.Colors.accent.opacity(0.35), lineWidth: 1)
+                        )
                     }
-
-                    Spacer()
-
-                    Button(action: dismissResponseCard) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(DS.Colors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
                 }
             }
         }

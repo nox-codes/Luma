@@ -12,6 +12,33 @@ import Combine
 import Foundation
 import SwiftUI
 
+// MARK: - Task Step Model
+
+/// The lifecycle state of a single agent task step (tool call).
+enum AgentStepState {
+    case inProgress
+    case completed
+    case failed
+}
+
+/// Represents one discrete step the agent took while executing a task.
+/// Each step corresponds to one tool call (e.g. bash, read_file, write_file).
+struct AgentStep: Identifiable {
+    let id: UUID
+    /// Human-readable label derived from the tool name, e.g. "bash", "read_file".
+    let label: String
+    /// Current lifecycle state of this step.
+    var state: AgentStepState
+
+    init(label: String, state: AgentStepState = .inProgress) {
+        self.id = UUID()
+        self.label = label
+        self.state = state
+    }
+}
+
+// MARK: - AgentSessionStatus
+
 enum AgentSessionStatus: Equatable {
     case stopped
     case starting
@@ -54,8 +81,19 @@ final class AgentSession: ObservableObject, Identifiable {
     /// buildContextualPrompt to replace raw transcript history in follow-up prompts,
     /// keeping multi-session token cost flat instead of growing linearly.
     @Published private(set) var completedTaskSummary: String?
+    /// Steps extracted from tool-call command entries during the current task.
+    /// Cleared when a new prompt is submitted; each tool call appends one step.
+    @Published private(set) var taskSteps: [AgentStep] = []
     @Published var model: String
     @Published var workingDirectoryPath: String
+
+    /// The shell command this session is executing, if it was spawned by the
+    /// CLI classifier path. `nil` for normal agent sessions. Used by the dock
+    /// bubble to switch to CLI display mode (monospace output, command disclosure).
+    @Published private(set) var cliCommand: String?
+
+    /// True when this session was spawned to run a single shell command.
+    var isCLISession: Bool { cliCommand != nil }
 
     /// Random icon shape assigned at creation for visual variety in the dock
     let iconShape: AgentIconShape
@@ -93,6 +131,15 @@ final class AgentSession: ObservableObject, Identifiable {
         return normalized.isEmpty ? nil : normalized
     }
 
+    /// ≤20-word summary shown in the compact card and spoken by the write engine.
+    /// Truncates `latestActivitySummary` to 20 words with an ellipsis if needed.
+    var shortSummary: String? {
+        guard let full = latestActivitySummary else { return nil }
+        let words = full.split(separator: " ", omittingEmptySubsequences: true)
+        if words.count <= 20 { return full }
+        return words.prefix(20).joined(separator: " ") + "…"
+    }
+
     var hasVisibleActivity: Bool {
         !entries.isEmpty
     }
@@ -113,6 +160,13 @@ final class AgentSession: ObservableObject, Identifiable {
         self.workingDirectoryPath = workingDirectoryPath
         self.iconShape = restoredIconShape ?? AgentIconShape.random
         self.glowColor = restoredGlowColor ?? Self.randomGlowColors.randomElement() ?? Color.blue
+    }
+
+    /// Marks this session as a CLI session so the dock bubble renders in CLI display mode.
+    /// Should be called immediately after creating the session, before binding the runtime.
+    func markAsCLISession(command: String) {
+        cliCommand = command
+        title = "Shell: \(command.prefix(40))"
     }
 
     /// Restores a transcript entry from persisted data (does not trigger memory recording).
@@ -136,6 +190,21 @@ final class AgentSession: ObservableObject, Identifiable {
                 if entry.role == .assistant {
                     let card = ResponseCard(source: .agent, rawText: entry.text)
                     self.latestResponseCard = card
+                }
+
+                // Parse tool-call command entries as task progress steps.
+                // Each command entry corresponds to one tool invocation (bash, read_file, etc.).
+                // We mark the previous in-progress step as completed when the next command
+                // arrives (since the runtime only emits one command at a time sequentially).
+                if entry.role == .command {
+                    // Complete the previous step before starting the next one.
+                    var updatedSteps = self.taskSteps
+                    if let previousInProgressIndex = updatedSteps.indices.last(where: { updatedSteps[$0].state == .inProgress }) {
+                        updatedSteps[previousInProgressIndex].state = .completed
+                    }
+                    let newStepLabel = self.stepLabelFromCommandText(entry.text)
+                    updatedSteps.append(AgentStep(label: newStepLabel))
+                    self.taskSteps = updatedSteps
                 }
 
                 // Persist to memory history
@@ -171,10 +240,25 @@ final class AgentSession: ObservableObject, Identifiable {
 
                 // Detect task completion: running → ready
                 if case .running = previousStatus, case .ready = newStatus {
+                    // Finalize the last step that was still in-progress.
+                    var finalizedSteps = self.taskSteps
+                    if let idx = finalizedSteps.indices.last(where: { finalizedSteps[$0].state == .inProgress }) {
+                        finalizedSteps[idx].state = .completed
+                        self.taskSteps = finalizedSteps
+                    }
                     self.announceTaskCompletion()
                     // Summarize the completed session in the background so follow-up
                     // prompts can use a compact summary instead of the raw transcript.
                     self.triggerTaskCompletionSummarization()
+                }
+
+                // If the task failed, mark the last in-progress step as failed.
+                if case .running = previousStatus, case .failed = newStatus {
+                    var failedSteps = self.taskSteps
+                    if let idx = failedSteps.indices.last(where: { failedSteps[$0].state == .inProgress }) {
+                        failedSteps[idx].state = .failed
+                        self.taskSteps = failedSteps
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -204,6 +288,8 @@ final class AgentSession: ObservableObject, Identifiable {
         entries.append(userEntry)
         status = .running
         lastErrorMessage = nil
+        // Clear previous task steps so the progress section starts fresh for this task.
+        taskSteps = []
 
         // Build full conversation context so the runtime has complete history
         let contextualPrompt = buildContextualPrompt(latestPrompt: prompt)
@@ -286,24 +372,34 @@ final class AgentSession: ObservableObject, Identifiable {
     static let taskCompletedNotificationName = Notification.Name("lumaAgentTaskCompleted")
 
     private func announceTaskCompletion() {
-        let rawLastResponse = entries.last(where: { $0.role == .assistant })?.text ?? "Task completed."
-        // Strip control tags and enforce 150-char display limit before broadcasting.
-        // The system prompt already instructs Claude to stay under 25 words; this is
-        // a hard guardrail so nothing unexpected leaks to TTS or the overlay bubble.
-        let cleanedSummary = LumaWriteEngine.cleanAndTruncate(rawLastResponse, maxLength: 150)
+        // Build a spoken announcement that includes three components:
+        // 1. What the user asked (task excerpt from the last user message)
+        // 2. A brief summary of the response (shortSummary, ≤20 words)
+        // 3. A direction to the agent bubble for the full details
+        // This gives full context without reading the entire response aloud.
+        let lastUserPromptText = entries.last(where: { $0.role == .user })?.text ?? ""
+        let taskExcerpt = String(lastUserPromptText.prefix(60))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let responseBrief = shortSummary ?? "Task completed."
 
-        // Post notification — callers use "summary" only; "title" is kept for logging.
+        let spokenAnnouncement: String
+        if taskExcerpt.isEmpty {
+            spokenAnnouncement = "\(responseBrief). See the agent bubble for more information."
+        } else {
+            spokenAnnouncement = "\(taskExcerpt). \(responseBrief). See the agent bubble for the full details."
+        }
+
         NotificationCenter.default.post(
             name: Self.taskCompletedNotificationName,
             object: nil,
             userInfo: [
                 "sessionId": id,
                 "title": title,
-                "summary": cleanedSummary
+                "summary": spokenAnnouncement
             ]
         )
 
-        LumaLogger.log("[Luma] Agent '\(title)' completed: \(cleanedSummary.prefix(80))")
+        LumaLogger.log("[Luma] Agent '\(title)' completed: \(responseBrief.prefix(80))")
     }
 
     // MARK: - Task Summarization
@@ -501,6 +597,20 @@ final class AgentSession: ObservableObject, Identifiable {
               let firstBlock = contentArray.first,
               let text = firstBlock["text"] as? String else { return nil }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Step Parsing
+
+    /// Extracts a human-readable step label from a command transcript entry.
+    /// ClaudeCodeAgentRuntime formats command entries as "[tool_name] input...",
+    /// e.g. "[bash] ls -la" → "bash", "[read_file] path.swift" → "read_file".
+    private func stepLabelFromCommandText(_ commandText: String) -> String {
+        if commandText.hasPrefix("["), let closingBracketIndex = commandText.firstIndex(of: "]") {
+            let toolName = String(commandText[commandText.index(after: commandText.startIndex)..<closingBracketIndex])
+            return toolName.isEmpty ? commandText : toolName
+        }
+        // Fallback: use the first word as the label
+        return commandText.components(separatedBy: " ").first ?? commandText
     }
 
     /// Returns the cheapest model suitable for title generation for a given provider.

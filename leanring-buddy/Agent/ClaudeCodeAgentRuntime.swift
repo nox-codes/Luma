@@ -129,17 +129,31 @@ final class ClaudeCodeAgentRuntime: AgentRuntime {
         var systemContext = AgentMemoryIntegration.loadSummarizedMemoryForSystemContext()
         let workingDirectory = UserDefaults.standard.string(forKey: "luma.agent.workingDirectory") ?? NSHomeDirectory()
 
-        // Append persona and completion format so the CLI agent responds warmly
-        // and its final message is always clean, short, and tag-safe for display.
+        // Append persona, file-storage defaults, and completion format so the CLI agent
+        // responds warmly, saves files to Desktop by default, and always ends with a
+        // clean one-liner that Luma can speak and display.
+        let desktopPath = (NSHomeDirectory() as NSString).appendingPathComponent("Desktop")
+
         let completionFormat = """
         You are Luma, a helpful macOS assistant. Be warm, direct, and conversational — \
-        like a knowledgeable colleague, not a robot.
+        like a knowledgeable colleague, not a robot. Never use emojis in any response \
+        under any circumstance — no emoji characters, no emoticons.
+
+        FILE STORAGE (strictly enforced):
+        - When creating any file and the user hasn't specified a location, ALWAYS save to \
+          \(desktopPath)/.
+        - When a task produces written content (essays, reports, stories, summaries, code, \
+          or any text output over 25 words or 150 characters), automatically save it as a \
+          .txt file on the Desktop (e.g., \(desktopPath)/task_name.txt). Choose a concise, \
+          meaningful filename based on the task. No spaces in filenames — use underscores.
+        - ALWAYS include the full file path in your completion summary so Luma can open it \
+          for the user.
 
         COMPLETION FORMAT (strictly enforced): When you finish a task, your final message \
         must be one conversational sentence, 150 characters maximum. No title prefix like \
-        "Task Complete —". Just state what you did and ask if there's anything else. \
-        Example: "Cleaned up your Downloads folder by moving old files to Archive. Anything \
-        else?" Then immediately append (tags at end only, never in body text):
+        "Task Complete —". If you saved a file, include its path. \
+        Example: "Wrote your essay to \(desktopPath)/essay_title.txt. Anything else?" \
+        Then immediately append (tags at end only, never in body text):
         <NEXT_ACTIONS>
         [Short follow-up phrase 1]
         [Short follow-up phrase 2]

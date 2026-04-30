@@ -29,7 +29,14 @@ struct ResponseCard: Identifiable {
             let actionsText = String(rawText[startRange.upperBound..<endRange.lowerBound])
             parsedActions = actionsText
                 .components(separatedBy: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .map { line -> String in
+                    var action = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // Strip surrounding square brackets that some models add, e.g. [Action text]
+                    if action.hasPrefix("[") && action.hasSuffix("]") {
+                        action = String(action.dropFirst().dropLast())
+                    }
+                    return action
+                }
                 .filter { !$0.isEmpty }
             parsedActions = Array(parsedActions.prefix(2))
             cleanedText = rawText.replacingCharacters(
