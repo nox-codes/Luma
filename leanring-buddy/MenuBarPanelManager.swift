@@ -12,6 +12,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 extension Notification.Name {
@@ -32,13 +33,67 @@ final class MenuBarPanelManager: NSObject {
     private var dismissPanelObserver: NSObjectProtocol?
 
     private let companionManager: CompanionManager
-    private let panelWidth: CGFloat = 356
+
+    /// The NSView that hosts the SwiftUI content. Stored so we can update its
+    /// frame width when the agent response contains wide tables.
+    private weak var contentHostingView: NSView?
+    /// Holds the Combine subscription that re-subscribes to response card changes
+    /// whenever the active agent session changes.
+    private var sessionIDCancellable: AnyCancellable?
+    /// Holds the Combine subscription on the current active session's response card.
+    private var responseCardCancellable: AnyCancellable?
+
+    struct PanelSizeKey: PreferenceKey {
+        static var defaultValue: CGSize = .zero
+        static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+            value = nextValue()
+        }
+    }
+    
+    private func morphPanel(to newSize: CGSize) {
+        guard let panel = panel else { return }
+        guard let buttonWindow = statusItem?.button?.window else { return }
+
+        // Prevent redundant animations if the size hasn't actually changed
+        guard panel.frame.size != newSize else { return }
+
+        let statusItemFrame = buttonWindow.frame
+        let gapBelowMenuBar: CGFloat = 4
+
+        // Calculate new origin to stay anchored below the menu bar icon
+        let panelOriginX = statusItemFrame.midX - (newSize.width / 2)
+        let panelOriginY = statusItemFrame.minY - newSize.height - gapBelowMenuBar
+
+        let newFrame = NSRect(x: panelOriginX, y: panelOriginY, width: newSize.width, height: newSize.height)
+
+        // If the panel isn't visible yet, just snap to the new size silently
+        guard panel.isVisible else {
+            panel.setFrame(newFrame, display: false)
+            return
+        }
+
+        // Smooth morph animation if the panel is already open
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            // Re-using your nice springy timing function
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.0)
+            panel.animator().setFrame(newFrame, display: true)
+        }
+    }
+
+    /// Base (minimum) panel width. The panel grows wider when the agent response
+    /// contains wide tables, then shrinks back when the response is cleared.
+    private let panelBaseWidth: CGFloat = 356
+    /// Maximum panel width — limits how wide the panel can grow for very wide tables.
+    private let panelMaxWidth: CGFloat = 600
+    /// Tall enough to accommodate the panel content before morphPanel takes over.
     private let panelHeight: CGFloat = 420
 
     init(companionManager: CompanionManager) {
         self.companionManager = companionManager
         super.init()
         createStatusItem()
+        startObservingAgentResponse()
 
         dismissPanelObserver = NotificationCenter.default.addObserver(
             forName: .lumaDismissPanel,
@@ -60,6 +115,70 @@ final class MenuBarPanelManager: NSObject {
         if let observer = dismissPanelObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+
+    // MARK: - Adaptive panel width (agent response)
+
+    /// Watches the active session ID and re-subscribes to its response card whenever
+    /// it changes, so the panel always tracks the currently-visible agent's content.
+    private func startObservingAgentResponse() {
+        sessionIDCancellable = companionManager.$activeAgentSessionID
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.subscribeToActiveSessionResponseCard()
+            }
+        // Subscribe immediately for the current session.
+        subscribeToActiveSessionResponseCard()
+    }
+
+    /// Subscribes to `latestResponseCard` on the currently-active agent session.
+    /// Called once at init and again each time the active session changes.
+    private func subscribeToActiveSessionResponseCard() {
+        responseCardCancellable = companionManager.activeAgentSession.$latestResponseCard
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] responseCard in
+                self?.updateContentWidthForAgentResponse(responseCard?.rawText)
+            }
+    }
+
+    /// Computes the ideal content width for `responseText` (widened for wide tables)
+    /// and updates the hosting view frame so SwiftUI re-layouts at the new width.
+    /// The PanelSizeKey preference fires after layout and morphPanel handles the resize.
+    private func updateContentWidthForAgentResponse(_ responseText: String?) {
+        let neededWidth: CGFloat
+        if let text = responseText {
+            neededWidth = requiredPanelWidthForResponseText(text)
+        } else {
+            neededWidth = panelBaseWidth
+        }
+        guard let hostingView = contentHostingView,
+              abs(neededWidth - hostingView.frame.width) > 4 else { return }
+        // Update the hosting view width — SwiftUI re-renders, PanelSizeKey fires,
+        // morphPanel resizes the panel to match.
+        hostingView.frame.size.width = neededWidth
+    }
+
+    /// Scans `responseText` for GFM pipe tables and returns the panel width needed
+    /// to display the widest table without severe cell wrapping.
+    /// Each column is allocated 75pt; result is clamped to [panelBaseWidth, panelMaxWidth].
+    private func requiredPanelWidthForResponseText(_ responseText: String) -> CGFloat {
+        let lines = responseText.components(separatedBy: "\n")
+        var maximumColumnCount = 0
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            guard trimmedLine.hasPrefix("|") && trimmedLine.hasSuffix("|") else { continue }
+            let innerContent = trimmedLine.dropFirst().dropLast()
+            let cells = innerContent.components(separatedBy: "|")
+            let isSeparatorRow = cells.allSatisfy { cell in
+                cell.trimmingCharacters(in: .init(charactersIn: "- :")).isEmpty
+            }
+            guard !isSeparatorRow else { continue }
+            maximumColumnCount = max(maximumColumnCount, cells.count)
+        }
+        guard maximumColumnCount > 0 else { return panelBaseWidth }
+        // 90pt per column matches RichMarkdownView's kTableColumnMinWidth; +28pt for panel padding
+        let computedWidth = CGFloat(maximumColumnCount) * 90 + 28
+        return min(max(computedWidth, panelBaseWidth), panelMaxWidth)
     }
 
     // MARK: - Status Item
@@ -153,44 +272,60 @@ final class MenuBarPanelManager: NSObject {
     }
 
     private func createPanel() {
-        let companionPanelView = CompanionPanelView(companionManager: companionManager)
-            .frame(width: panelWidth)
-            .preferredColorScheme(.dark)
+            // 1. Build the SwiftUI content.
+            //    No fixed width frame here — the hosting view frame IS the width constraint.
+            //    When the agent response contains wide tables, updateContentWidthForAgentResponse
+            //    updates the hosting view frame, SwiftUI re-renders at the new width,
+            //    PanelSizeKey fires with the new CGSize, and morphPanel resizes the panel.
+            let companionPanelView = CompanionPanelView(companionManager: companionManager)
+                .fixedSize(horizontal: false, vertical: true)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: PanelSizeKey.self, value: proxy.size)
+                    }
+                )
+                .onPreferenceChange(PanelSizeKey.self) { [weak self] newSize in
+                    DispatchQueue.main.async {
+                        self?.morphPanel(to: newSize)
+                    }
+                }
+                .preferredColorScheme(.dark)
 
-        let hostingView = NSHostingView(rootView: companionPanelView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
-        hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = .clear
+            // 2. Set up the hosting view. Its frame width controls how wide SwiftUI lays out.
+            //    We store a weak reference so updateContentWidthForAgentResponse can update it.
+            let hostingView = NSHostingView(rootView: companionPanelView)
+            hostingView.frame = NSRect(x: 0, y: 0, width: panelBaseWidth, height: panelHeight)
+            hostingView.wantsLayer = true
+            hostingView.layer?.backgroundColor = .clear
+            contentHostingView = hostingView
 
-        let menuBarPanel = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
+            // 3. Create the actual Panel
+            let menuBarPanel = KeyablePanel(
+                contentRect: NSRect(x: 0, y: 0, width: panelBaseWidth, height: panelHeight),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
 
-        menuBarPanel.isFloatingPanel = true
-        menuBarPanel.level = .floating
-        menuBarPanel.isOpaque = false
-        menuBarPanel.backgroundColor = .clear
-        menuBarPanel.hasShadow = false
-        menuBarPanel.hidesOnDeactivate = false
-        menuBarPanel.isExcludedFromWindowsMenu = true
-        menuBarPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        menuBarPanel.isMovableByWindowBackground = false
-        menuBarPanel.titleVisibility = .hidden
-        menuBarPanel.titlebarAppearsTransparent = true
-        // Force dark appearance so system controls (Picker, TextField, etc.)
-        // render with dark chrome even when the user's macOS is in light mode.
-        menuBarPanel.appearance = NSAppearance(named: .darkAqua)
+            menuBarPanel.isFloatingPanel = true
+            menuBarPanel.level = .floating
+            menuBarPanel.isOpaque = false
+            menuBarPanel.backgroundColor = .clear
+            menuBarPanel.hasShadow = false
+            menuBarPanel.hidesOnDeactivate = false
+            menuBarPanel.isExcludedFromWindowsMenu = true
+            menuBarPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            menuBarPanel.isMovableByWindowBackground = false
+            menuBarPanel.titleVisibility = .hidden
+            menuBarPanel.titlebarAppearsTransparent = true
+            menuBarPanel.appearance = NSAppearance(named: .darkAqua)
 
-        // Exclude from screen capture so the Luma panel doesn't appear in
-        // Cmd+Shift+3/4 screenshots or other apps capturing the screen.
-        menuBarPanel.sharingType = .none
-        menuBarPanel.contentView = hostingView
-        panel = menuBarPanel
-    }
-
+            menuBarPanel.sharingType = .readWrite
+            menuBarPanel.contentView = hostingView
+            
+            self.panel = menuBarPanel
+        }
+    
     private func positionPanelBelowStatusItem() {
         guard let panel else { return }
         guard let buttonWindow = statusItem?.button?.window else { return }
@@ -198,17 +333,18 @@ final class MenuBarPanelManager: NSObject {
         let statusItemFrame = buttonWindow.frame
         let gapBelowMenuBar: CGFloat = 4
 
-        // Calculate the panel's content height from the hosting view's fitting size
-        // so the panel snugly wraps the SwiftUI content instead of using a fixed height.
-        let fittingSize = panel.contentView?.fittingSize ?? CGSize(width: panelWidth, height: panelHeight)
+        // Derive panel size from the hosting view's current frame width
+        // (set by updateContentWidthForAgentResponse) and the content's natural height.
+        let currentContentWidth = contentHostingView?.frame.width ?? panelBaseWidth
+        let fittingSize = panel.contentView?.fittingSize ?? CGSize(width: currentContentWidth, height: panelHeight)
         let actualPanelHeight = fittingSize.height
 
         // Horizontally center the panel beneath the status item icon
-        let panelOriginX = statusItemFrame.midX - (panelWidth / 2)
+        let panelOriginX = statusItemFrame.midX - (currentContentWidth / 2)
         let panelOriginY = statusItemFrame.minY - actualPanelHeight - gapBelowMenuBar
 
         panel.setFrame(
-            NSRect(x: panelOriginX, y: panelOriginY, width: panelWidth, height: actualPanelHeight),
+            NSRect(x: panelOriginX, y: panelOriginY, width: currentContentWidth, height: actualPanelHeight),
             display: true
         )
     }

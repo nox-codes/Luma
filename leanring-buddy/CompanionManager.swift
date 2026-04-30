@@ -21,6 +21,16 @@ enum CompanionVoiceState {
     case responding
 }
 
+/// Tracks whether the classifier is currently idle or executing a task.
+/// Used to route mid-task voice messages to the active context instead
+/// of re-running the full classification pipeline.
+enum LumaSystemState: Equatable {
+    case idle
+    /// Currently executing the given path. New voice messages are forwarded
+    /// as follow-up context to that path rather than triggering a new classify.
+    case executing(path: LumaExecutionPath)
+}
+
 @MainActor
 final class CompanionManager: ObservableObject {
     @Published private(set) var voiceState: CompanionVoiceState = .idle
@@ -66,8 +76,10 @@ final class CompanionManager: ObservableObject {
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let tutorialManager = PostOnboardingTutorialManager()
-    // Response text is now displayed inline on the cursor overlay via
-    // streamingResponseText, so no separate response overlay manager is needed.
+    /// Agent completion summary to surface in the pointer-phrase speech bubble
+    /// that appears next to the cursor. Set when a task transitions running→ready;
+    /// auto-cleared after 6 seconds so the bubble fades away naturally.
+    @Published var agentSummaryBubbleText: String?
 
     /// Shared API client that routes requests to whichever profile the user configured.
     /// Reads the active profile from ProfileManager on each request so profile switches
@@ -115,6 +127,22 @@ final class CompanionManager: ObservableObject {
 
     /// Task that restores the overlay visibility after the screenshot hide delay.
     private var screenshotHideRestoreTask: Task<Void, Never>?
+
+    // MARK: - Intent Classifier State
+
+    /// Tracks whether the system is currently executing a classified task.
+    /// When `.executing`, new voice messages are forwarded as follow-ups to
+    /// the active path rather than re-run through the classifier — prevents
+    /// mid-task messages from clashing with a running agent or CLI command.
+    @Published private(set) var systemExecutionState: LumaSystemState = .idle
+
+    /// When set, the next voice input is a clarification answer for this original input.
+    /// The two strings are combined before re-running the classifier.
+    private var pendingClassifierOriginalInput: String?
+    /// When set, the next voice input should be interpreted as a yes/no confirmation
+    /// for the stored pending action (destructive/irreversible operations).
+    /// The closure runs the action; nil means the user cancelled.
+    private var pendingConfirmationAction: (() async -> Void)?
 
     /// True when all three required permissions (accessibility, screen recording,
     /// microphone) are granted. Used by the panel to show a single "all good" state.
@@ -338,15 +366,13 @@ final class CompanionManager: ObservableObject {
                 // stay in follow-cursor mode; pointing is only for UI element references.
                 self.nativeTTSClient.speak(summary)
 
-                // Show the completion summary in the companion bubble so the user
-                // sees the result even if they aren't watching the agent dock.
-                let bubbleContent = LumaWriteEngine.shared.content(for: .response, text: summary)
-                CompanionBubbleWindow.shared.show(text: bubbleContent.text)
-                if let duration = bubbleContent.displayDuration {
-                    Task {
-                        try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                        CompanionBubbleWindow.shared.hide()
-                    }
+                // Show the completion summary in the pointer-phrase speech bubble
+                // next to the cursor — the same blue bubble used for element pointing.
+                // Auto-clears after 6 seconds so the bubble fades away naturally.
+                self.agentSummaryBubbleText = summary
+                Task {
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    self.agentSummaryBubbleText = nil
                 }
 
                 // If the summary references a file path that exists on disk, open
@@ -795,23 +821,13 @@ final class CompanionManager: ObservableObject {
                         LumaLogger.log("[Luma] Companion received transcript: \(finalTranscript)")
                         LumaAnalytics.trackUserMessageSent(transcript: finalTranscript)
 
-                        // Check for agent spawn command: "hey luma agent, <task>"
-                        if let inlineTask = AgentVoiceIntegration.extractAgentSpawnIntent(from: finalTranscript) {
-                            if !self.isAgentModeEnabled {
-                                self.isAgentModeEnabled = true
-                                UserDefaults.standard.set(true, forKey: "luma.agentMode.enabled")
-                            }
-                            AgentVoiceIntegration.handleSpawnIntent(inlineTask: inlineTask, companionManager: self)
-                            return
+                        // All routing now goes through LumaIntentClassifier — no hardcoded
+                        // path selection, no required prefixes. The classifier determines
+                        // the best execution path based on content and screen context.
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            await self.classifyAndRouteInput(finalTranscript)
                         }
-
-                        // Auto-detect agent-worthy tasks
-                        if self.isAgentModeEnabled, AgentVoiceIntegration.isAgentWorthyTask(finalTranscript) {
-                            AgentVoiceIntegration.handleSpawnIntent(inlineTask: finalTranscript, companionManager: self)
-                            return
-                        }
-
-                        self.sendTranscriptToClaudeWithScreenshot(transcript: finalTranscript)
                     }
                 )
             }
@@ -837,6 +853,7 @@ final class CompanionManager: ObservableObject {
     rules:
     - give brief but complete responses, 2-4 sentences. never cut off mid-sentence. never refuse or state limitations — always find a way to help.
     - never use markdown, bullet points, lists, or formatting of any kind — just natural spoken sentences.
+    - never use emojis under any circumstance — no emoji characters, no emoticons.
     - never say "simply" or "just". don't use abbreviations or symbols that sound weird read aloud.
     - if the user's question relates to what's on their screen, reference specific things you see. if the screenshot isn't relevant, answer directly.
     - when guiding through tasks, be specific about what to click and where — name the exact button, menu, or field.
@@ -867,7 +884,7 @@ final class CompanionManager: ObservableObject {
     /// in parseStepsFromTaggedResponse lets one streaming API call replace the separate
     /// TaskPlanner round-trip, saving latency and tokens.
     private static let multiStepPlanningSystemPrompt = """
-    You are Luma, a friendly macOS guide. The user needs help with a multi-step task. You can see their screen.
+    You are Luma, a friendly macOS guide. The user needs help with a multi-step task. You can see their screen. Never use emojis under any circumstance.
 
     Respond with EXACTLY two parts — nothing else:
 
@@ -892,6 +909,209 @@ final class CompanionManager: ObservableObject {
 
     CRITICAL: You MUST output the <STEPS>...</STEPS> block. Never skip it. Never replace it with plain text steps.
     """
+
+    // MARK: - Intent Classifier Routing
+
+    /// Single entry point for all user voice input in companion mode.
+    /// Runs LumaIntentClassifier to determine the best execution path,
+    /// handles clarification and confirmation loops, then dispatches to
+    /// the appropriate engine (CLI, agent, walkthrough, or Claude response).
+    private func classifyAndRouteInput(_ transcript: String) async {
+        // SYSTEM STATE GUARD — if a task is already running, route as a follow-up
+        // to the active execution context rather than re-running the full classifier.
+        // This prevents mid-task voice messages from spawning a second execution.
+        if case .executing(let activePath) = systemExecutionState {
+            LumaLogger.log("[LumaClassifier] System is executing — routing follow-up to active path: \(activePath)")
+            switch activePath {
+            case .visualAgent:
+                // Forward to the active agent session as a follow-up prompt
+                if let activeSession = agentSessions.first(where: { $0.status == .running || $0.status == .starting }) {
+                    await activeSession.submitPrompt(transcript)
+                } else {
+                    // No running session — fall through to normal routing
+                    break
+                }
+                return
+            case .cli, .guide, .response:
+                // For CLI / guide / response paths, the follow-up becomes a new response request
+                sendTranscriptToClaudeWithScreenshot(transcript: transcript)
+                return
+            }
+        }
+
+        // If we were waiting for a clarification answer, combine it with the
+        // original input and re-classify. This lets the classifier pick up full context.
+        if let pendingInput = pendingClassifierOriginalInput {
+            pendingClassifierOriginalInput = nil
+            let combinedInput = "\(pendingInput) (context: \(transcript))"
+            LumaLogger.log("[LumaClassifier] Re-classifying with clarification appended")
+            await classifyAndRouteInput(combinedInput)
+            return
+        }
+
+        // If we were waiting for a yes/no confirmation, interpret this input as the answer.
+        if let confirmAction = pendingConfirmationAction {
+            pendingConfirmationAction = nil
+            let lowercased = transcript.lowercased()
+            let userConfirmed = lowercased.contains("yes") || lowercased.contains("confirm")
+                || lowercased.contains("proceed") || lowercased.contains("do it")
+                || lowercased.contains("sure") || lowercased.contains("go ahead")
+            if userConfirmed {
+                await confirmAction()
+            } else {
+                voiceState = .responding
+                try? await nativeTTSClient.speakText("Got it, I won't do that.")
+                voiceState = .idle
+                scheduleTransientHideIfNeeded()
+            }
+            return
+        }
+
+        // Run the classifier — show spinner while we wait for the Claude call
+        voiceState = .processing
+        let result = await LumaIntentClassifier.shared.classify(userInput: transcript)
+
+        // Clarification needed — ask, store original, wait for next input
+        if result.clarificationNeeded, let question = result.clarificationQuestion {
+            pendingClassifierOriginalInput = transcript
+            voiceState = .responding
+            try? await nativeTTSClient.speakText(question)
+            voiceState = .idle
+            scheduleTransientHideIfNeeded()
+            return
+        }
+
+        // Low confidence without clarification question — generic prompt for more detail
+        if result.confidence == .low {
+            pendingClassifierOriginalInput = transcript
+            voiceState = .responding
+            let genericPrompt = result.clarificationQuestion ?? "Could you give me a bit more detail about what you'd like to do?"
+            try? await nativeTTSClient.speakText(genericPrompt)
+            voiceState = .idle
+            scheduleTransientHideIfNeeded()
+            return
+        }
+
+        // Confirmation required — speak prompt, store action, wait for yes/no
+        if result.requiresConfirmation, let confirmPrompt = result.confirmationPrompt {
+            let pathToExecute = result.path
+            let intentDescription = result.intent
+            pendingConfirmationAction = { [weak self] in
+                guard let self else { return }
+                await self.executeClassifiedPath(pathToExecute, intent: intentDescription, originalTranscript: transcript)
+            }
+            voiceState = .responding
+            try? await nativeTTSClient.speakText("\(confirmPrompt) Say yes to proceed, or no to cancel.")
+            voiceState = .idle
+            scheduleTransientHideIfNeeded()
+            return
+        }
+
+        // For medium confidence on non-response paths, briefly announce the action
+        if result.confidence == .medium {
+            if case .response = result.path { /* no announcement — just answer */ }
+            else {
+                voiceState = .responding
+                try? await nativeTTSClient.speakText("I'll \(result.intent) — starting now.")
+                await nativeTTSClient.waitUntilFinished()
+            }
+        }
+
+        await executeClassifiedPath(result.path, intent: result.intent, originalTranscript: transcript)
+    }
+
+    /// Dispatches to the engine appropriate for the classified execution path.
+    /// Records the executed action so future classifier calls have recent history.
+    /// Sets systemExecutionState to .executing for the duration and resets to
+    /// .idle when the path completes so the classifier guard releases correctly.
+    private func executeClassifiedPath(
+        _ path: LumaExecutionPath,
+        intent: String,
+        originalTranscript: String
+    ) async {
+        // Mark system as executing so new voice input routes as follow-up, not re-classify
+        systemExecutionState = .executing(path: path)
+        defer { systemExecutionState = .idle }
+
+        switch path {
+
+        case .cli(let command):
+            // Route coding/scripting tasks to Claude Code (or API fallback) via the
+            // same agent infrastructure as manual agent spawning. This ensures tasks
+            // like "write a python script" go to the Claude Code desktop agent rather
+            // than running raw shell commands via CLIAgentRuntime.
+            LumaLogger.log("[LumaClassifier] → cli (Claude Code): \(command.prefix(80))")
+
+            // Enable agent mode if not already on so the dock becomes visible
+            if !isAgentModeEnabled {
+                isAgentModeEnabled = true
+                UserDefaults.standard.set(true, forKey: "luma.agentMode.enabled")
+            }
+
+            // Create a standard agent session — no markAsCLISession, same as a
+            // manually spawned agent so it gets Claude Code / API runtime, not zsh.
+            let claudeCodeSession = AgentSession()
+            agentSessions.append(claudeCodeSession)
+            activeAgentSessionID = claudeCodeSession.id
+
+            // Auto-detect Claude Code CLI; fall back to API runtime if not installed
+            let claudeCodeRuntime = AgentRuntimeManager.shared.createRuntime()
+            claudeCodeSession.bind(to: claudeCodeRuntime)
+
+            // Refresh the dock so the new bubble appears immediately
+            updateAgentDock()
+
+            // Warm up and submit the task (async — completes on its own)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let systemContext = AgentMemoryIntegration.loadSummarizedMemoryForSystemContext()
+                await claudeCodeSession.warmUp()
+                await claudeCodeSession.submitPrompt(command, systemContext: systemContext)
+
+                // Once done, speak a brief completion phrase
+                voiceState = .responding
+                let spokenSummary = "Done. Check the agent bubble for the full output."
+                try? await nativeTTSClient.speakText(spokenSummary)
+                await nativeTTSClient.waitUntilFinished()
+                voiceState = .idle
+                scheduleTransientHideIfNeeded()
+            }
+
+            LumaIntentClassifier.shared.recordExecutedAction("sent to Claude Code: \(command.prefix(60))")
+            voiceState = .idle
+
+        case .visualAgent(let goal):
+            // Hand off to LumaFlowEngine which runs the full plan→execute→observe loop.
+            // The engine creates its own AgentSession and drives the dock bubble via
+            // LumaFlowRuntime. This replaces direct AgentVoiceIntegration spawning.
+            LumaLogger.log("[LumaClassifier] → visual_agent → LumaFlowEngine: \(goal.prefix(80))")
+            if !isAgentModeEnabled {
+                isAgentModeEnabled = true
+                UserDefaults.standard.set(true, forKey: "luma.agentMode.enabled")
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await LumaFlowEngine.shared.startFlow(goal: goal, companionManager: self)
+            }
+            LumaIntentClassifier.shared.recordExecutedAction("started flow for: \(goal.prefix(60))")
+            voiceState = .idle
+            scheduleTransientHideIfNeeded()
+
+        case .guide(let topic):
+            // Route to the walkthrough / multi-step guide pipeline via existing Claude call.
+            // sendTranscriptToClaudeWithScreenshot uses its on-device classifier to detect
+            // multi-step requests and hands them to WalkthroughEngine automatically.
+            LumaLogger.log("[LumaClassifier] → guide: \(topic.prefix(80))")
+            LumaIntentClassifier.shared.recordExecutedAction("started guide on: \(topic.prefix(60))")
+            sendTranscriptToClaudeWithScreenshot(transcript: topic)
+
+        case .response(let query):
+            // Route to standard Claude vision response pipeline
+            LumaLogger.log("[LumaClassifier] → response: \(query.prefix(80))")
+            LumaIntentClassifier.shared.recordExecutedAction("answered: \(query.prefix(60))")
+            sendTranscriptToClaudeWithScreenshot(transcript: query)
+        }
+    }
 
     // MARK: - AI Response Pipeline
 
@@ -1704,7 +1924,7 @@ final class CompanionManager: ObservableObject {
         updateAgentDock()
     }
 
-    private func updateAgentDock() {
+    func updateAgentDock() {
         if agentSessions.isEmpty || !isAgentModeEnabled {
             agentDockManager.hide()
         } else {
@@ -1731,15 +1951,28 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// Submits a prompt to a specific agent session (used from dock expanded card text input).
+    /// Handles text typed into any agent bubble's follow-up input field.
+    /// If there is an active LumaFlow for this session, the text is injected into it directly.
+    /// For all other session types (ClaudeCode, API), the text is submitted straight to the
+    /// session runtime — Claude Code is smart enough to handle any request without pre-routing.
     func submitAgentPromptForSession(sessionID: UUID, prompt: String) {
+        activeAgentSessionID = sessionID
         guard let session = agentSessions.first(where: { $0.id == sessionID }) else { return }
+
+        // Active LumaFlow: inject as follow-up into the running step loop
+        if LumaFlowEngine.shared.isFlowActiveForSession(sessionID) {
+            LumaFlowEngine.shared.sendFollowUp(prompt)
+            updateAgentDock()
+            return
+        }
+
+        // Claude Code / API agent: submit directly — no additional routing layer
         let systemContext = AgentMemoryIntegration.loadSummarizedMemoryForSystemContext()
         Task {
             await session.submitPrompt(prompt, systemContext: systemContext)
         }
         updateAgentDock()
-    }
+    };
 
     /// Toggles voice recording for a specific agent session. Click once to start, click again to stop.
     func toggleAgentVoiceRecording(sessionID: UUID) {

@@ -11,6 +11,14 @@
 
 import Foundation
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    /// Posted on any thread immediately after a new ConversationEntry is written to disk.
+    /// The history window subscribes to this to update its list in real time.
+    static let lumaHistoryDidUpdate = Notification.Name("com.luma.historyDidUpdate")
+}
+
 /// A single conversation entry stored in per-agent history files.
 struct ConversationEntry: Codable {
     let timestamp: Date
@@ -79,6 +87,14 @@ final class LumaMemoryManager: @unchecked Sendable {
         return (try? String(contentsOf: memoryFileURL, encoding: .utf8)) ?? ""
     }
 
+    /// Overwrites the entire memory.md file with the given content.
+    /// Used by the Memory Window editor to persist user edits.
+    func saveMemory(content: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        try? content.data(using: .utf8)?.write(to: memoryFileURL, options: .atomic)
+    }
+
     /// Appends a new fact to memory.md with a timestamp header.
     func updateMemory(newFact: String) {
         lock.lock()
@@ -115,6 +131,10 @@ final class LumaMemoryManager: @unchecked Sendable {
 
         // Check size and rotate if needed
         rotateHistoryFileIfNeeded(forAgentId: agentId, currentFileURL: currentFileURL)
+
+        // Notify observers (e.g. the live history window) that a new entry was written.
+        // Posted on a background thread — observers must dispatch to main if needed.
+        NotificationCenter.default.post(name: .lumaHistoryDidUpdate, object: nil)
     }
 
     /// Searches all JSON history files for entries containing the query string.
@@ -144,6 +164,28 @@ final class LumaMemoryManager: @unchecked Sendable {
         }
 
         return matchingEntries.sorted { $0.timestamp > $1.timestamp }
+    }
+
+    /// Loads every conversation entry across all agents and all history files.
+    /// Returns entries sorted by timestamp, newest first.
+    func loadAllHistory() -> [ConversationEntry] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let historyFiles = try? fileManager.contentsOfDirectory(
+            at: historyDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var allEntries: [ConversationEntry] = []
+        for fileURL in historyFiles where fileURL.pathExtension == "json" {
+            allEntries.append(contentsOf: loadEntriesFromFile(at: fileURL))
+        }
+
+        return allEntries.sorted { $0.timestamp > $1.timestamp }
     }
 
     /// Loads all history entries for a specific agent, across all of its history files.

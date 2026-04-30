@@ -999,6 +999,10 @@ private struct GeneralTabView: View {
                 Divider()
                 logsSection
                 Divider()
+                memorySection
+                Divider()
+                historySection
+                Divider()
                 aboutSection
             }
             .padding(DS.Spacing.xl)
@@ -1135,6 +1139,78 @@ private struct GeneralTabView: View {
         let logContents = LumaLogger.readCurrentLogFileContents() ?? "(no logs found)"
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(logContents, forType: .string)
+    }
+
+    // MARK: Memory Section
+
+    private var memorySection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+
+            Text("Memory")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            Text("View and edit the global memory file Luma uses to remember preferences and facts between sessions.")
+                .font(.system(size: 13))
+                .foregroundColor(DS.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                LumaMemoryWindowManager.shared.showMemoryWindow()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 12))
+                    Text("Open Memory Editor")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(DS.Colors.textOnAccent)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Colors.accent)
+                .cornerRadius(DS.CornerRadius.small)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+    }
+
+    // MARK: History Section
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+
+            Text("Conversation History")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            Text("Browse all conversations stored by agents and the companion. Supports search and bulk deletion.")
+                .font(.system(size: 13))
+                .foregroundColor(DS.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                LumaHistoryWindowManager.shared.showHistoryWindow()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 12))
+                    Text("Open Conversation History")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(DS.Colors.textOnAccent)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Colors.accent)
+                .cornerRadius(DS.CornerRadius.small)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
     }
 
     // MARK: About Section

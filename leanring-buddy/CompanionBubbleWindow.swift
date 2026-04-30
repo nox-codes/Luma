@@ -319,7 +319,7 @@ final class CompanionBubbleWindow {
         bubblePanel.becomesKeyOnlyIfNeeded = false
         // Exclude from screen capture so the bubble doesn't appear in
         // Cmd+Shift+3/4 screenshots or other apps capturing the screen.
-        bubblePanel.sharingType = .none
+        bubblePanel.sharingType = .readWrite
 
         // MARK: Hosted SwiftUI Content
 

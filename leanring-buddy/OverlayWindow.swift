@@ -73,6 +73,13 @@ struct NavigationBubbleSizePreferenceKey: PreferenceKey {
     }
 }
 
+struct AgentSummaryBubbleSizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
+}
+
 /// The buddy's behavioral mode. Controls whether it follows the cursor,
 /// is flying toward a detected UI element, or is pointing at an element.
 enum BuddyNavigationMode {
@@ -131,6 +138,17 @@ struct BlueCursorView: View {
     @State private var navigationBubbleText: String = ""
     @State private var navigationBubbleOpacity: Double = 0.0
     @State private var navigationBubbleSize: CGSize = .zero
+
+    /// Speech bubble text shown when an agent task completes.
+    /// Driven by companionManager.agentSummaryBubbleText — auto-clears after 6s.
+    /// agentSummaryBubbleText holds the full text (controls visibility).
+    /// agentSummaryTypedText holds the typewriter-animated portion actually displayed.
+    @State private var agentSummaryBubbleText: String = ""
+    @State private var agentSummaryTypedText: String = ""
+    @State private var agentSummaryBubbleOpacity: Double = 0.0
+    @State private var agentSummaryBubbleSize: CGSize = .zero
+    /// Cancellation handle for the typewriter animation task.
+    @State private var agentSummaryTypewriterTask: Task<Void, Never>? = nil
 
     /// The cursor position at the moment navigation started, used to detect
     /// if the user moves the cursor enough to cancel the navigation.
@@ -295,6 +313,41 @@ struct BlueCursorView: View {
                     }
             }
 
+            // Agent summary bubble — shown when an agent task completes.
+            // Uses the same blue-pill style as the navigation pointer bubble but
+            // appears next to the cursor in follow-cursor mode (no pointing animation).
+            // Text is revealed character-by-character via agentSummaryTypedText.
+            // agentSummaryBubbleText holds the full text and controls visibility.
+            if !agentSummaryBubbleText.isEmpty {
+                Text(lumaMarkdown(agentSummaryTypedText))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: 320)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(DS.Colors.overlayCursorBlue)
+                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 8, x: 0, y: 0)
+                    )
+                    .fixedSize(horizontal: agentSummaryBubbleText.count <= 40, vertical: true)
+                    .overlay(
+                        GeometryReader { geo in
+                            Color.clear
+                                .preference(key: AgentSummaryBubbleSizePreferenceKey.self, value: geo.size)
+                        }
+                    )
+                    .opacity(agentSummaryBubbleOpacity)
+                    .position(x: cursorPosition.x + 10 + (agentSummaryBubbleSize.width / 2), y: cursorPosition.y + 18)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
+                    .animation(.easeOut(duration: 0.4), value: agentSummaryBubbleOpacity)
+                    .onPreferenceChange(AgentSummaryBubbleSizePreferenceKey.self) { newSize in
+                        agentSummaryBubbleSize = newSize
+                    }
+            }
+
             // Blue triangle cursor — shown when idle or while TTS is playing (responding).
             // All three states (triangle, waveform, spinner) stay in the view tree
             // permanently and cross-fade via opacity so SwiftUI doesn't remove/re-insert
@@ -419,6 +472,47 @@ struct BlueCursorView: View {
             }
 
             startNavigatingToElement(screenLocation: screenLocation)
+        }
+        .onChange(of: companionManager.agentSummaryBubbleText) { newText in
+            // Only the screen that currently owns the cursor shows the agent
+            // summary bubble — avoids duplicate bubbles on multi-monitor setups.
+            guard isCursorOnThisScreen else { return }
+
+            if let text = newText, !text.isEmpty {
+                // Cancel any in-progress typewriter before starting a new one.
+                agentSummaryTypewriterTask?.cancel()
+
+                agentSummaryBubbleText = text
+                agentSummaryTypedText = ""  // reset so typewriter starts from scratch
+                withAnimation(.easeIn(duration: 0.3)) {
+                    agentSummaryBubbleOpacity = 1.0
+                }
+
+                // Reveal the text character by character at ~30 ms per character,
+                // giving a natural typing speed without feeling too slow.
+                agentSummaryTypewriterTask = Task { @MainActor in
+                    let characters = Array(text)
+                    for index in characters.indices {
+                        guard !Task.isCancelled else { break }
+                        try? await Task.sleep(nanoseconds: 30_000_000) // 30 ms
+                        guard !Task.isCancelled else { break }
+                        agentSummaryTypedText = String(characters.prefix(index + 1))
+                    }
+                }
+            } else {
+                // Cancel typewriter first so it doesn't write after the fade-out.
+                agentSummaryTypewriterTask?.cancel()
+                agentSummaryTypewriterTask = nil
+
+                withAnimation(.easeOut(duration: 0.5)) {
+                    agentSummaryBubbleOpacity = 0.0
+                }
+                // Clear both texts after the fade-out finishes so the view leaves the tree.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                    agentSummaryBubbleText = ""
+                    agentSummaryTypedText = ""
+                }
+            }
         }
     }
 

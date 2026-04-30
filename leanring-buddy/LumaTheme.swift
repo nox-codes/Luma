@@ -280,3 +280,15 @@ struct LumaTheme {
 
 // CompanionShape, CompanionTriangle, MorphingCompanionShape, NoiseTextureView,
 // ButtonGlowHoverModifier, and glowOnHover are now defined in DesignSystem.swift.
+
+// MARK: - Markdown helper
+
+/// Parses `string` as inline Markdown and returns an `AttributedString` for use in
+/// SwiftUI `Text` views. Handles **bold**, *italic*, `code`, and ~~strikethrough~~.
+/// Falls back to plain `AttributedString` if parsing fails so callers never crash.
+func lumaMarkdown(_ string: String) -> AttributedString {
+    let options = AttributedString.MarkdownParsingOptions(
+        interpretedSyntax: .inlineOnlyPreservingWhitespace
+    )
+    return (try? AttributedString(markdown: string, options: options)) ?? AttributedString(string)
+}

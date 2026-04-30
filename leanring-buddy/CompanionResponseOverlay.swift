@@ -94,7 +94,7 @@ final class CompanionResponseOverlayManager {
         responseOverlayPanel.isExcludedFromWindowsMenu = true
         // Exclude from screen capture so the response overlay doesn't appear in
         // Cmd+Shift+3/4 screenshots or other apps capturing the screen.
-        responseOverlayPanel.sharingType = .none
+        responseOverlayPanel.sharingType = .readWrite
 
         let hostingView = NSHostingView(
             rootView: CompanionResponseOverlayView(viewModel: overlayViewModel)
