@@ -9,7 +9,7 @@
 A native macOS AI teaching assistant that lives beside your cursor.
 Watches your screen, guides you step by step, and teaches you anything — right where you work.
 
-![macOS](https://img.shields.io/badge/macOS-14.0%2B-black)
+![macOS](https://img.shields.io/badge/macOS-14.0%2B-white)
 &nbsp;
 ![Swift](https://img.shields.io/badge/Swift-5.9-lightgreen)
 &nbsp;
