@@ -35,7 +35,7 @@ final class AgentHotkeyHandler {
             return event
         }
 
-        // Global monitor for when the app is in the background
+        // Global monitor for when the app is running in the background
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyEvent(event)
         }
