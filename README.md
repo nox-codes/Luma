@@ -102,7 +102,7 @@ If you don't have Xcode installed:
 
 ---
 
-### Step 3 — Download Luma
+### Step 4 — Clone and open the project
 
 Open **Terminal** (search "Terminal" in Spotlight with `Cmd + Space`) and run:
 
@@ -116,7 +116,7 @@ This downloads the project and opens it in Xcode automatically.
 
 ---
 
-### Step 4 — Set your signing team in Xcode
+### Step 4b — Set your signing team in Xcode
 
 Before you can run Luma on your Mac, Xcode needs to know it's yours.
 
@@ -129,7 +129,7 @@ Before you can run Luma on your Mac, Xcode needs to know it's yours.
 
 ---
 
-### Step 5 — Add the MobileNetV2 model (optional but recommended)
+### Step 4c — Add the MobileNetV2 model (optional but recommended)
 
 This enables Luma's on-device visual element detection. Without it, Luma still works — it just relies more on the Accessibility API.
 
@@ -142,7 +142,7 @@ Xcode will compile it automatically when you build.
 
 ---
 
-### Step 6 — Build and run
+### Step 4d — Build and run
 
 Press `⌘ R` (Command + R) in Xcode to build and run Luma.
 
@@ -150,7 +150,7 @@ The first build takes a minute or two. After that, Luma launches and the **onboa
 
 ---
 
-### Step 7 — Complete onboarding
+### Step 5 — Complete onboarding
 
 The wizard walks you through 5 quick steps:
 
