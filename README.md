@@ -21,6 +21,121 @@ Watches your screen, guides you step by step, and teaches you anything — right
 
 ---
 
+## Install Guide
+
+### What you need before starting
+
+| Requirement | Details |
+|---|---|
+| Mac | Apple Silicon or Intel, macOS 14.0 (Sonoma) or later |
+| Xcode | Version 15 or later — free from the Mac App Store |
+| API key | A free key from [OpenRouter](https://openrouter.ai) is enough to get started |
+| Internet | Only needed for API calls — all on-device features work offline |
+
+> **Not sure which macOS version you have?** Click the Apple logo in the top-left corner → "About This Mac". The version number is shown there.
+
+---
+
+### Step 1 — Get a free API key
+
+You need an API key so Luma can talk to an AI model. The easiest option is OpenRouter, which has a completely free tier.
+
+1. Go to [openrouter.ai](https://openrouter.ai) and create a free account.
+2. Go to **Keys** in your account dashboard and create a new key.
+3. Copy the key — it starts with `sk-or-...`. Keep it somewhere safe for now.
+
+> If you already have an Anthropic, Google AI, or any OpenAI-compatible key, those work too — you can set those up during onboarding.
+
+---
+
+### Step 2 — Install Xcode
+
+If you don't have Xcode installed:
+
+1. Open the **App Store** on your Mac.
+2. Search for **Xcode** and install it (it's free, but large — around 10 GB).
+3. Open Xcode once after installing so it can finish setting up its components.
+
+---
+
+### Step 3 — Download Luma
+
+Open **Terminal** (search "Terminal" in Spotlight with `Cmd + Space`) and run:
+
+```bash
+git clone https://github.com/Omoju-Mayowa/luma.git
+cd luma
+open leanring-buddy.xcodeproj
+```
+
+This downloads the project and opens it in Xcode automatically.
+
+---
+
+### Step 4 — Set your signing team in Xcode
+
+Before you can run Luma on your Mac, Xcode needs to know it's yours.
+
+1. In Xcode, click on **leanring-buddy** in the left sidebar (the top-most item with a blue icon).
+2. Select the **leanring-buddy** target under "Targets".
+3. Click the **Signing & Capabilities** tab.
+4. Under "Team", open the dropdown and select your Apple ID. If you don't see one, click **Add an Account** and sign in with your Apple ID.
+
+> A personal Apple ID (free) is enough. You do not need a paid Apple Developer account.
+
+---
+
+### Step 5 — Add the MobileNetV2 model (optional but recommended)
+
+This enables Luma's on-device visual element detection. Without it, Luma still works — it just relies more on the Accessibility API.
+
+1. Download `MobileNetV2.mlmodel` from [Apple's Core ML model gallery](https://developer.apple.com/machine-learning/models/).
+2. In Xcode, find the `Resources/Models/` folder in the left sidebar.
+3. Drag the downloaded `MobileNetV2.mlmodel` file into that folder.
+4. When prompted, make sure **"Add to targets: leanring-buddy"** is checked, then click **Finish**.
+
+Xcode will compile it automatically when you build.
+
+---
+
+### Step 6 — Build and run
+
+Press `⌘ R` (Command + R) in Xcode to build and run Luma.
+
+The first build takes a minute or two. After that, Luma launches and the **onboarding wizard** opens automatically.
+
+---
+
+### Step 7 — Complete onboarding
+
+The wizard walks you through 5 quick steps:
+
+| Step | What to do |
+|---|---|
+| Welcome | Read the intro, click Continue |
+| Username | Enter a display name — this is just shown locally |
+| PIN (optional) | Set a 6-digit PIN to lock your settings, or skip |
+| API Profile | Paste your OpenRouter key. Set the base URL to `https://openrouter.ai/api/v1` and pick a model (recommend `google/gemini-2.5-flash:free` for free usage) |
+| Permissions | Grant Microphone, Screen Recording, and Accessibility access when prompted |
+
+> **Why does Luma need these permissions?**
+> - **Microphone** — to hear your voice when you press `Ctrl + Option`
+> - **Screen Recording** — to take a screenshot to show the AI what's on your screen
+> - **Accessibility** — to detect UI elements (buttons, fields, icons) so it can point at them
+
+After the wizard finishes, Luma disappears into your **menu bar** (top-right area of your screen). Click the icon there to open the companion panel anytime.
+
+---
+
+### You're set up. Here's how to use it.
+
+- **Talk to Luma** — Hold `Ctrl + Option`, speak your request, release. Luma responds with voice and a floating bubble near your cursor.
+- **Start a walkthrough** — Say something like "open Safari and go to Google". Luma will guide you step by step.
+- **Spawn an agent** — Say "create an agent to research X" or press `Ctrl + Cmd + N`. The agent runs in the background while you keep working.
+- **Open settings** — Click the menu bar icon → Settings (or enter your PIN if you set one).
+
+---
+
 ## What is Luma?
 
 Luma is a native macOS AI companion built for learners, developers, creatives, and everyone in between. It sits in your menu bar, follows your cursor with a floating companion bubble, and uses the macOS Accessibility API alongside real-time screen analysis to watch what's happening on your screen.
