@@ -572,6 +572,12 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 - [x] Keychain `kSecAttrAccessibleAfterFirstUnlock` — no repeated OS prompts
 - [x] Permissions recovery — overlay reappears after grant without restart
 
+**Sidetrack**
+- [ ] Fix Agent Bubble rendering and physics conflicts
+- [ ] - [ ] Improve Agent intelligence
+- [ ] Make Visual Agent interact seamless
+- [ ] Improve flow and progress for tasks
+
 **v0.5.0 — Agent** ✅ Complete
 - [x] Multi-agent session system — up to 10 concurrent agents, auto-dismiss oldest idle
 - [x] Claude CLI runtime — subprocess with `--output-format stream-json`, streaming events
