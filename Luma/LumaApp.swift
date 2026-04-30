@@ -1,6 +1,6 @@
 //
-//  leanring_buddyApp.swift
-//  leanring-buddy
+//  LumaApp.swift
+//  Luma
 //
 //  Menu bar-only companion app. No dock icon, no main window — just an
 //  always-available status item in the macOS menu bar. Clicking the icon
@@ -13,7 +13,7 @@ import SwiftUI
 import Sparkle
 
 @main
-struct leanring_buddyApp: App {
+struct LumaApp: App {
     @NSApplicationDelegateAdaptor(CompanionAppDelegate.self) var appDelegate
 
     var body: some Scene {

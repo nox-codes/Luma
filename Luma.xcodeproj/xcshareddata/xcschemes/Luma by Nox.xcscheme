@@ -36,8 +36,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "28F22CCB2F56440300A0FC59"
-               BuildableName = "leanring-buddyTests.xctest"
-               BlueprintName = "leanring-buddyTests"
+               BuildableName = "LumaTests.xctest"
+               BlueprintName = "LumaTests"
                ReferencedContainer = "container:Luma.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -47,8 +47,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "28F22CD52F56440300A0FC59"
-               BuildableName = "leanring-buddyUITests.xctest"
-               BlueprintName = "leanring-buddyUITests"
+               BuildableName = "LumaUITests.xctest"
+               BlueprintName = "LumaUITests"
                ReferencedContainer = "container:Luma.xcodeproj">
             </BuildableReference>
          </TestableReference>

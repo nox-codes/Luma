@@ -55,7 +55,7 @@ The app calls external APIs directly using keys stored in the macOS Keychain. Ke
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `leanring_buddyApp.swift` | ~89 | Menu bar app entry point. Uses `@NSApplicationDelegateAdaptor` with `CompanionAppDelegate` which creates `MenuBarPanelManager` and starts `CompanionManager`. No main window — the app lives entirely in the status bar. |
+| `LumaApp.swift` | ~89 | Menu bar app entry point. Uses `@NSApplicationDelegateAdaptor` with `CompanionAppDelegate` which creates `MenuBarPanelManager` and starts `CompanionManager`. No main window — the app lives entirely in the status bar. |
 | `CompanionManager.swift` | ~1026 | Central state machine. Owns dictation, shortcut monitoring, screen capture, Claude API, native TTS, and overlay management. Tracks voice state (idle/listening/processing/responding), conversation history, model selection, and cursor visibility. Coordinates the full push-to-talk → screenshot → Claude → TTS → pointing pipeline. |
 | `MenuBarPanelManager.swift` | ~244 | NSStatusItem + custom NSPanel lifecycle. Creates the menu bar icon, manages the floating companion panel (show/hide/position), installs click-outside-to-dismiss monitor. |
 | `CompanionPanelView.swift` | ~900 | SwiftUI panel content for the menu bar dropdown. Shows companion status, push-to-talk instructions, searchable model picker (fetches from OpenRouter, free/paid sections, recommended badges), permissions UI, DM feedback button, and quit button. Dark aesthetic using `DS` design system. |
@@ -108,9 +108,9 @@ The app calls external APIs directly using keys stored in the macOS Keychain. Ke
 
 ```bash
 # Open in Xcode
-open leanring-buddy.xcodeproj
+open Luma.xcodeproj
 
-# Select the leanring-buddy scheme, set signing team, Cmd+R to build and run
+# Select the "Luma by Nox" scheme, set signing team, Cmd+R to build and run
 
 # Known non-blocking warnings: Swift 6 concurrency warnings,
 # deprecated onChange warning in OverlayWindow.swift. Do NOT attempt to fix these.
@@ -152,7 +152,7 @@ IMPORTANT: Follow these naming rules strictly. Clarity is the top priority.
 - Do not add features, refactor code, or make "improvements" beyond what was asked
 - Do not add docstrings, comments, or type annotations to code you did not change
 - Do not try to fix the known non-blocking warnings (Swift 6 concurrency, deprecated onChange)
-- Do not rename the project directory or scheme (the "leanring" typo is intentional/legacy)
+- Do not rename the project directory or main scheme
 - Do not run `xcodebuild` from the terminal — it invalidates TCC permissions
 
 ## Git Workflow
