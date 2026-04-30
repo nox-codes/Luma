@@ -281,7 +281,8 @@ Download `MobileNetV2.mlmodel` from [Apple's Core ML model gallery](https://deve
 
 ### The Full Pipeline
 
-<img src="assets/luma_flowchart_v8.svg" alt="Luma Pipeline Flowchart Version 7" />
+<!--Removed(currently outdated flowchart)-->
+<!--<img src="assets/luma_flowchart_v8.svg" alt="Luma Pipeline Flowchart Version 7" />-->
 
 ### Written Process
 ```
@@ -548,7 +549,7 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 
 ## Roadmap
 
-**v1.0 — Local** ✅ Complete
+**v0.1.0 — Local** ✅ Complete
 - [x] Custom cursor + companion bubble
 - [x] Multi-profile API config with Keychain storage
 - [x] Smart model switcher (OpenRouter free/paid)
@@ -571,7 +572,7 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 - [x] Keychain `kSecAttrAccessibleAfterFirstUnlock` — no repeated OS prompts
 - [x] Permissions recovery — overlay reappears after grant without restart
 
-**v3.0 — Agent** ✅ Complete
+**v0.5.0 — Agent** ✅ Complete
 - [x] Multi-agent session system — up to 10 concurrent agents, auto-dismiss oldest idle
 - [x] Claude CLI runtime — subprocess with `--output-format stream-json`, streaming events
 - [x] Claude API runtime — tool-use loop fallback (bash, click, type, key_press, open_app, screenshot, wait)
@@ -590,13 +591,13 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 - [x] Cheap-model summarisation — Haiku / gemini-flash / gpt-4o-mini writes session summary on completion
 - [x] Flat follow-up cost — subsequent prompts use summary instead of raw transcript history
 
-**v2.0 — Accounts** *(planned)*
+**v1.0.0 — Accounts** *(planned)*
 - [ ] Go backend (JWT auth, argon2id hashing)
 - [ ] Cross-device profile sync
 - [ ] Plan-based profile limits
 - [ ] Full on-device STT via WhisperKit (encoder + decoder)
 
-**v4.0 — SaaS** *(planned)*
+**v1.2.0 — SaaS** *(planned)*
 - [ ] Stripe billing integration
 - [ ] Free + Pro tiers
 - [ ] Public release
