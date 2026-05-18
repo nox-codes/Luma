@@ -417,6 +417,13 @@ final class APIClient {
         await acquireRequestSlot()
         defer { releaseRequestSlot() }
 
+        // If this task was cancelled while waiting in the request queue, bail immediately.
+        // Without this check, the cancelled task would still make a full network request,
+        // burn the rate-limit slot, and force the next real request to wait 15+ seconds.
+        if Task.isCancelled {
+            throw CancellationError()
+        }
+
         let startTime = Date()
 
         // Resolve the profile and key fresh on each request so profile changes are instant
@@ -535,10 +542,12 @@ final class APIClient {
         }
 
         var accumulatedResponseText = ""
+        var receivedDataLineCount = 0
 
         for try await sseRawLine in byteStream.lines {
             // SSE lines look like "data: {...}" — skip anything else (comments, empty lines, event: lines)
             guard sseRawLine.hasPrefix("data: ") else { continue }
+            receivedDataLineCount += 1
             let jsonString = String(sseRawLine.dropFirst(6)) // Drop the "data: " prefix
 
             // Both Anthropic and OpenAI-compatible streams signal end-of-stream with [DONE]
@@ -563,6 +572,20 @@ final class APIClient {
         }
 
         let totalDuration = Date().timeIntervalSince(startTime)
+        LumaLogger.log("[APIClient] Stream complete — \(receivedDataLineCount) SSE lines received, \(accumulatedResponseText.count) chars accumulated, duration: \(String(format: "%.2f", totalDuration))s")
+
+        // If the stream produced zero text, throw so the caller can surface an error to the user.
+        // This catches cases where the model returns 200 OK but sends only non-text SSE events
+        // (e.g. thinking-only blocks, tool-call events, or a completely unexpected SSE format).
+        // Silent empty responses are the #1 cause of "no API response" in Release builds.
+        if accumulatedResponseText.isEmpty && receivedDataLineCount > 0 {
+            throw NSError(
+                domain: "APIClient",
+                code: -5,
+                userInfo: [NSLocalizedDescriptionKey: "The AI returned a 200 OK but no text content was found in the response stream. The model '\(effectiveModelID)' may not support streaming or returned only non-text content (thinking blocks, tool calls, etc.). Try switching to a different model in Settings."]
+            )
+        }
+
         return (text: accumulatedResponseText, duration: totalDuration)
     }
 
@@ -583,6 +606,12 @@ final class APIClient {
     ) async throws -> (text: String, duration: TimeInterval) {
         await acquireRequestSlot()
         defer { releaseRequestSlot() }
+
+        // If this task was cancelled while waiting in the request queue, bail immediately
+        // without making a network call — same reason as in analyzeImageStreaming.
+        if Task.isCancelled {
+            throw CancellationError()
+        }
 
         let startTime = Date()
 

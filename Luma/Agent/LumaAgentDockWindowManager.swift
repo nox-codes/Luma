@@ -182,6 +182,10 @@ private final class KeyAcceptingPanel: NSPanel {
 /// never reaches the SwiftUI gesture recognizer.
 private final class FirstMouseHostingView<T: View>: NSHostingView<T> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    
+    @_optimize(none)
+    deinit {}
+
 }
 
 // MARK: - AgentBubbleWindow

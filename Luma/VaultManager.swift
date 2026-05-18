@@ -94,9 +94,15 @@ final class VaultManager {
     /// if the vault doesn't exist yet (first run after upgrade).
     private static func loadOrMigrate() -> LumaVault {
         // Happy path: vault already exists
-        if let data = try? KeychainManager.load(key: vaultKey),
-           let vault = try? JSONDecoder().decode(LumaVault.self, from: data) {
-            return vault
+        if let data = try? KeychainManager.load(key: vaultKey) {
+            if let vault = try? JSONDecoder().decode(LumaVault.self, from: data) {
+                LumaLogger.log("[VaultManager] Vault loaded from Keychain — \(vault.apiKeys.count) API key(s) present, hasPIN: \(vault.pin != nil)")
+                return vault
+            } else {
+                LumaLogger.log("[VaultManager] Vault data found in Keychain but JSON decode failed — rebuilding from legacy items")
+            }
+        } else {
+            LumaLogger.log("[VaultManager] Vault not found in Keychain — first launch, Keychain access denied (Release vs Debug signing), or upgrading from legacy storage")
         }
 
         // Migration: fold old PIN item into a fresh vault
@@ -105,6 +111,7 @@ final class VaultManager {
         if let pin = try? KeychainManager.loadString(key: "com.nox.luma.pin") {
             migrated.pin = pin
             try? KeychainManager.delete(key: "com.nox.luma.pin")
+            LumaLogger.log("[VaultManager] Migrated legacy PIN from Keychain")
         }
         // API keys (com.nox.luma.apikey.<uuid>) are migrated lazily in
         // ProfileManager.loadAPIKey(forProfileID:) once profile UUIDs are known.
@@ -113,6 +120,7 @@ final class VaultManager {
             try? KeychainManager.save(key: vaultKey, data: data)
         }
 
+        LumaLogger.log("[VaultManager] Fresh vault created — user will need to re-enter API key if this is a Release build accessing Debug-saved Keychain items")
         return migrated
     }
 }

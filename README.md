@@ -17,7 +17,7 @@ Watches your screen, guides you step by step, and teaches you anything — right
 &nbsp;
 ![License](https://img.shields.io/badge/License-MIT-black)
 &nbsp;
-![Status](https://img.shields.io/badge/Status-v0.5.0-blue)
+![Status](https://img.shields.io/badge/Status-v0.5.1-blue)
 <!--Going to add Actual demo gif soon-->
 <!--<img src="assets/1024-mac.png" alt="Luma/Click Logo" width="480" />-->
 
@@ -242,14 +242,15 @@ A full autonomous multi-agent system built into the menu bar. Agents run indepen
 - **Token-Optimised Context** — Agent sessions use several techniques to keep API costs low across long tasks and follow-up prompts (see Cost Profile below).
 
 ### API & Cost Management
-- **Request Queue** — All Claude API calls go through a single queue with a minimum 15-second gap between requests. No concurrent calls, ever.
+- **Request Queue** — All Claude API calls go through a single queue with a minimum 15-second gap between requests. No concurrent calls, ever. Cancelled requests (e.g. the user speaks again mid-flight) exit the queue immediately without making a network call, so they never burn the rate-limit slot or force the next real request to wait an extra 15 seconds.
 - **429 Retry Logic** — On a rate limit response, Luma waits 60 seconds then retries once. If the retry also fails, the call is skipped gracefully — no crash, no loop.
+- **Empty Response Detection** — If a model returns HTTP 200 but no text content in the SSE stream (e.g. thinking-only blocks, tool-call events, or an unexpected SSE format), Luma treats it as an error and speaks a fallback message rather than returning silently to idle. The log shows exactly how many SSE lines were received and which model was used.
 - **Bring Your Own Keys** — Connect directly to OpenRouter, Anthropic, Google AI, or any custom OpenAI-compatible endpoint. No Luma servers involved in your conversations. Keys are never transmitted to Luma's infrastructure.
 - **Multi-Profile System** — Create multiple API profiles for different providers or use cases. Set a default, switch instantly, manage everything from settings.
 - **Smart Model Switcher** — Browse all OpenRouter models split into Free and Paid sections, searchable, with recommended badges. Model selection persists per profile in Keychain.
 
 ### Security & Privacy
-- **Keychain Storage** — All API keys are stored in macOS Keychain with `kSecAttrAccessibleAfterFirstUnlock`. After granting access once, Luma reads keys silently — no repeated permission dialogs per session.
+- **Keychain Storage** — All API keys are stored in a single vault item (`com.nox.luma.vault`) in macOS Keychain with `kSecAttrAccessibleAfterFirstUnlock`. After granting access once, Luma reads keys silently — no repeated permission dialogs per session. If vault access is denied (e.g. a Release build signed with a different identity from the Debug build that originally saved the key), Luma logs a clear diagnostic message and prompts the user to re-enter their key in Settings rather than failing silently.
 - **PIN Security** — Protect settings with a 6-digit PIN stored in Keychain. Numeric keypad UI with shake animation on wrong entry.
 - **Analytics** — Anonymous usage events (interactions, errors) are sent to PostHog. No API keys, no transcripts, no personal identifiers. All events are anonymized at the SDK level.
 - **Permissions Recovery** — If screen recording or accessibility permission is granted after launch, Luma detects the change and re-initialises the overlay without requiring an app restart.
@@ -601,6 +602,12 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 - [x] Cheap-model summarisation — Haiku / gemini-flash / gpt-4o-mini writes session summary on completion
 - [x] Flat follow-up cost — subsequent prompts use summary instead of raw transcript history
 
+**v0.5.1 — Stability** ✅ Complete
+- [x] Fixed: empty SSE stream (200 OK with no text chunks) now throws an error and speaks a fallback message instead of silently returning to idle — the primary cause of "no API response" in Release builds
+- [x] Fixed: cancelled voice requests no longer burn the 15-second rate-limit slot — cancelled tasks now exit the queue immediately without making a network call, so the next real request is no longer delayed by 15+ extra seconds
+- [x] Fixed: `VaultManager` now logs when Keychain access fails (vault not found, JSON decode error, or access denied due to Debug vs Release code-signing difference) so the cause is always visible in `~/Library/Logs/Luma/luma.log`
+- [x] Fixed: `ProfileManager.loadAPIKey()` now logs whether a key was found in the vault, in the legacy Keychain item, or not at all (key length only — no key content exposed)
+
 **v1.0.0 — Accounts** *(planned)*
 - [ ] Go backend (JWT auth, argon2id hashing)
 - [ ] Cross-device profile sync
@@ -616,7 +623,7 @@ Agent mode is text-only — no screenshots. Costs are driven by conversation con
 
 ## Privacy
 
-API keys live exclusively in macOS Keychain — never in UserDefaults, never in plaintext, never logged. After the first access grant, keys are read silently with `kSecAttrAccessibleAfterFirstUnlock`. Conversations go directly from your Mac to your chosen provider — Luma has no servers that touch your messages. Voice transcription runs fully on-device via Apple Speech. Screen access via the Accessibility API is only active during a walkthrough. Anonymous usage events (no API keys, no transcripts, no personal identifiers) are sent to PostHog for product analytics.
+API keys live exclusively in macOS Keychain (single vault item `com.nox.luma.vault`) — never in UserDefaults, never in plaintext, never logged. After the first access grant, keys are read silently with `kSecAttrAccessibleAfterFirstUnlock`. If a Release build with a different code-signing identity tries to read keys saved by a Debug build, Luma logs the Keychain denial and surfaces a clear prompt to re-enter the key — it does not fail silently. Conversations go directly from your Mac to your chosen provider — Luma has no servers that touch your messages. Voice transcription runs fully on-device via Apple Speech. Screen access via the Accessibility API is only active during a walkthrough. Anonymous usage events (no API keys, no transcripts, no personal identifiers) are sent to PostHog for product analytics.
 
 ---
 

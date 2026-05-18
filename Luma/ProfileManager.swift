@@ -165,23 +165,34 @@ final class ProfileManager: ObservableObject {
     /// Loads the API key for a profile. Served from in-memory cache after the first
     /// vault read so Keychain is never accessed more than once per session.
     func loadAPIKey(forProfileID profileID: UUID) -> String? {
-        if let cached = apiKeyCache[profileID] { return cached }
-        guard let profile = profiles.first(where: { $0.id == profileID }) else { return nil }
+        if let cached = apiKeyCache[profileID] {
+            LumaLogger.log("[ProfileManager] API key for profile \(profileID.uuidString.prefix(8))… served from cache (length: \(cached.count))")
+            return cached
+        }
+        guard let profile = profiles.first(where: { $0.id == profileID }) else {
+            LumaLogger.log("[ProfileManager] loadAPIKey: profile \(profileID.uuidString.prefix(8))… not found in profiles list")
+            return nil
+        }
 
         // Try the vault (current storage)
         if let key = VaultManager.shared.apiKey(for: profileID) {
+            LumaLogger.log("[ProfileManager] API key for profile '\(profile.name)' found in vault (length: \(key.count))")
             apiKeyCache[profileID] = key
             return key
         }
 
+        LumaLogger.log("[ProfileManager] API key for profile '\(profile.name)' not in vault — checking legacy per-profile Keychain item")
+
         // Lazy migration: key was stored in the old per-profile Keychain item
         if let key = try? KeychainManager.loadString(key: profile.keychainAPIKeyIdentifier) {
+            LumaLogger.log("[ProfileManager] Migrated legacy API key for profile '\(profile.name)' from Keychain (length: \(key.count))")
             try? VaultManager.shared.setAPIKey(key, for: profileID)
             try? KeychainManager.delete(key: profile.keychainAPIKeyIdentifier)
             apiKeyCache[profileID] = key
             return key
         }
 
+        LumaLogger.log("[ProfileManager] No API key found for profile '\(profile.name)' — Keychain may have denied access (Release vs Debug signing) or key was never entered")
         return nil
     }
 
