@@ -95,6 +95,12 @@ final class WalkthroughEngine: ObservableObject {
     /// Minimum seconds between consecutive AI screenshot validation calls.
     private let minimumSecondsBetweenAIValidations: TimeInterval = 1.5
 
+    /// Tracks the last (frontmost, target) bundle ID pair that triggered a skip log entry.
+    /// Only the FIRST occurrence of each unique pair is logged — subsequent identical skips
+    /// are suppressed to avoid flooding the log with the same message on every validation cycle.
+    private var lastSkipLoggedFrontmostBundleID: String? = nil
+    private var lastSkipLoggedTargetBundleID: String? = nil
+
     // MARK: - Typing Step State
     //
     // When a step instruction contains a typing keyword ("type", "write", "enter") followed
@@ -162,6 +168,16 @@ final class WalkthroughEngine: ObservableObject {
     /// The AXObserver installed for the current step's target app.
     /// Set to nil and removed from the run loop when the step ends.
     private var axObserver: AXObserver?
+
+    /// Pending debounce work item for AXSelectedTextChanged events.
+    /// Cancelled and replaced on every new event so only the final one in a rapid burst fires.
+    /// Cursor blinks and caret movements fire AXSelectedTextChanged hundreds of times per second —
+    /// without debouncing, every tick spawns a Task and hits the AX attribute APIs.
+    private var pendingSelectedTextChangedWorkItem: DispatchWorkItem?
+
+    /// Minimum quiet period after the last AXSelectedTextChanged event before it is forwarded
+    /// to handleAccessibilityNotification's slow-path logic.
+    private let selectedTextChangedDebounceInterval: TimeInterval = 0.150
 
     // MARK: - AX Observer Context
 
@@ -334,6 +350,15 @@ final class WalkthroughEngine: ObservableObject {
         // Cancel any in-flight AI pointing call (e.g. slow API response for a previous step's element)
         activePointingTask?.cancel()
         activePointingTask = nil
+
+        // Cancel any pending AXSelectedTextChanged debounce delivery so stale events
+        // from the just-ended step don't fire into the new step's context.
+        pendingSelectedTextChangedWorkItem?.cancel()
+        pendingSelectedTextChangedWorkItem = nil
+
+        // Reset skip-log deduplication state so the first skip of the new step is always logged.
+        lastSkipLoggedFrontmostBundleID = nil
+        lastSkipLoggedTargetBundleID = nil
 
         // Remove the AX observer from the run loop so no new callbacks will fire.
         // Swift's ARC releases the AXObserver object when axObserver is set to nil.
@@ -700,7 +725,19 @@ final class WalkthroughEngine: ObservableObject {
         // (e.g. System Settings, Finder under memory pressure) was slow to respond.
         axPollingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.checkFocusedElementForStepCompletion(step: step, allSteps: allSteps, generation: generation)
+                guard let self else { return }
+                // Self-terminate if the walkthrough is no longer executing. Acts as a safety
+                // net in case stopActiveStepAndCleanUp is missed in some code path — prevents
+                // idle AX polling after the walkthrough ends.
+                guard case .executing = self.state else {
+                    self.axPollingTimer?.invalidate()
+                    self.axPollingTimer = nil
+                    return
+                }
+                #if DEBUG
+                EnergyDebugLogger.timerFired("axPoll@0.5s")
+                #endif
+                self.checkFocusedElementForStepCompletion(step: step, allSteps: allSteps, generation: generation)
             }
         }
     }
@@ -851,9 +888,48 @@ final class WalkthroughEngine: ObservableObject {
     ///   Slow path — debounced AI screenshot validation for events that AX can't label (button
     ///               clicks, context menu selections, dialog openings, etc.)
     private func handleAccessibilityNotification(element: AXUIElement, notification: String, generation: Int) {
+        #if DEBUG
+        EnergyDebugLogger.axFired(notification)
+        #endif
         // Drop any callback whose generation doesn't match the current step.
         // This eliminates all races from stale observers and in-flight Task closures.
         guard generation == currentStepGeneration else { return }
+
+        // AXSelectedTextChanged fires hundreds of times per second on every cursor blink,
+        // caret movement, and character typed. Two filters stop it from burning CPU:
+        //
+        //   1. Value filter: if the selected text is empty this is a cursor-position event,
+        //      not a real selection — skip immediately before touching anything else.
+        //   2. Debounce: collapse rapid bursts into a single delivery after 150 ms of quiet.
+        //      Reschedules handleAccessibilityNotification after the quiet period so the
+        //      slow-path AI validation and fast-path label check still see the final state.
+        if notification == kAXSelectedTextChangedNotification {
+            var selectedTextRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedTextRef)
+            let selectedText = (selectedTextRef as? String) ?? ""
+            guard !selectedText.isEmpty else { return }
+
+            // Cancel any previously scheduled debounce delivery for this event type.
+            pendingSelectedTextChangedWorkItem?.cancel()
+            // Capture element and generation for the debounced re-delivery.
+            let capturedElement = element
+            let capturedGeneration = generation
+            let workItem = DispatchWorkItem { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.handleAccessibilityNotification(
+                        element: capturedElement,
+                        notification: kAXSelectedTextChangedNotification,
+                        generation: capturedGeneration
+                    )
+                }
+            }
+            pendingSelectedTextChangedWorkItem = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + selectedTextChangedDebounceInterval,
+                execute: workItem
+            )
+            return
+        }
 
         guard case .executing(let steps, let currentIndex) = state,
               currentIndex < steps.count else { return }
@@ -1000,7 +1076,16 @@ final class WalkthroughEngine: ObservableObject {
             if let targetBundleID = step.appBundleID {
                 let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
                 if frontmostBundleID?.lowercased() != targetBundleID.lowercased() {
-                    LumaLogger.log("[Luma] WalkthroughEngine: skipping AI validation — frontmost '\(frontmostBundleID ?? "nil")' ≠ target '\(targetBundleID)'")
+                    // Log only when the (frontmost, target) pair is new — suppress repeated
+                    // identical entries that would otherwise appear on every validation cycle
+                    // while the user is working in a different app.
+                    let currentFrontmost = frontmostBundleID ?? "nil"
+                    if currentFrontmost != lastSkipLoggedFrontmostBundleID
+                        || targetBundleID != lastSkipLoggedTargetBundleID {
+                        LumaLogger.log("[Luma] WalkthroughEngine: skipping AI validation — frontmost '\(currentFrontmost)' ≠ target '\(targetBundleID)'")
+                        lastSkipLoggedFrontmostBundleID = currentFrontmost
+                        lastSkipLoggedTargetBundleID = targetBundleID
+                    }
                     return
                 }
             }

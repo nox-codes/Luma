@@ -110,27 +110,27 @@ enum DS {
         // Higher surfaces are lighter, creating a sense of depth.
 
         /// The deepest background — used for the main app window fill.
-        static let background = Color(hex: "#101211")
+        static let background = Color(hex: "#0E0F0E")
 
         /// First elevation layer — used for cards, sidebar, top bar backgrounds.
-        static let surface1 = Color(hex: "#171918")
+        static let surface1 = Color(hex: "#141614")
 
         /// Second elevation layer — used for input fields, elevated cards, chat bubbles.
-        static let surface2 = Color(hex: "#202221")
+        static let surface2 = Color(hex: "#1A1C1A")
 
         /// Third elevation layer — used for hover backgrounds on interactive elements.
-        static let surface3 = Color(hex: "#272A29")
+        static let surface3 = Color(hex: "#212421")
 
         /// Fourth elevation layer — used for active/pressed states on interactive elements.
-        static let surface4 = Color(hex: "#2E3130")
+        static let surface4 = Color(hex: "#282B28")
 
         // ── Borders ──────────────────────────────────────────────────
 
         /// Subtle border — used for card outlines, dividers, input field borders.
-        static let borderSubtle = Color(hex: "#373B39")
+        static let borderSubtle = Color(hex: "#2E322E")
 
         /// Strong border — used for focused inputs, hovered card outlines.
-        static let borderStrong = Color(hex: "#444947")
+        static let borderStrong = Color(hex: "#3A3F3A")
 
         // ── Text ─────────────────────────────────────────────────────
 
@@ -138,10 +138,10 @@ enum DS {
         static let textPrimary = Color(hex: "#ECEEED")
 
         /// Secondary text — descriptions, hints, muted labels.
-        static let textSecondary = Color(hex: "#ADB5B2")
+        static let textSecondary = Color(hex: "#9BA39D")
 
         /// Tertiary text — very muted, used for section labels, timestamps, disabled text.
-        static let textTertiary = Color(hex: "#6B736F")
+        static let textTertiary = Color(hex: "#555D58")
 
         /// Text used on top of the accent fill (#2563eb blue), like the primary button label.
         /// White on #2563eb achieves ~5.1:1 contrast — WCAG AA compliant.
@@ -195,23 +195,28 @@ enum DS {
         // ── Semantic Colors ──────────────────────────────────────────
 
         /// Destructive/error actions — delete buttons, error messages, close button hover.
-        static let destructive = Color(hex: "#E5484D")        // Radix Red 9
+        static let destructive = Color(hex: "#E5484D")
 
         /// Destructive hover state.
-        static let destructiveHover = Color(hex: "#F2555A")   // Radix Red 10
+        static let destructiveHover = Color(hex: "#F2555A")
 
         /// Destructive used for text on dark backgrounds (brighter for readability).
-        static let destructiveText = Color(hex: "#FF6369")    // Radix Red 11
+        static let destructiveText = Color(hex: "#FF6369")
+
+        /// Destructive subtle background — errorBg in the design spec.
+        static let destructiveBg = Color(hex: "#E5484D").opacity(0.1)
 
         /// Success — checkmarks, granted status, completion indicators.
-        /// Independent green so success states are visually distinct from the blue accent.
-        static let success = Color(hex: "#34D399")      // Tailwind Emerald 400
+        static let success = Color(hex: "#34D399")
+
+        /// Success subtle background.
+        static let successBg = Color(hex: "#34D399").opacity(0.1)
 
         /// Warning — caution messages, manual verification failure explanations.
-        static let warning = Color(hex: "#FFB224")            // Radix Amber 9
+        static let warning = Color(hex: "#FFB224")
 
         /// Warning text — brighter variant for text on dark backgrounds.
-        static let warningText = Color(hex: "#F1A10D")        // Radix Amber 11
+        static let warningText = Color(hex: "#FFB224")
 
         /// Info/feature highlight — used for prompt card headers, code highlights.
         /// Lighter than accentText so informational elements are visually distinct
@@ -1071,7 +1076,9 @@ enum CompanionConfig {
     // MARK: Color
 
     /// Color of the floating companion, waveform bars, and glow.
-    static let color = Color(hex: "#0A84FF")
+    /// Reads the active accent theme at render time so the pointer color
+    /// updates immediately whenever the user changes the theme in Settings.
+    static var color: Color { LumaAccentTheme.current.cursorColor }
 
     // MARK: Border (idle state)
 
@@ -1089,7 +1096,8 @@ enum CompanionConfig {
     static let morphTargetHeight: CGFloat = 32
 
     /// Fill color after fully morphing into the target shape.
-    static let morphTargetColor: Color = Color(hex: "#0A84FF")
+    /// Also reads the accent theme dynamically so the pointing triangle matches.
+    static var morphTargetColor: Color { LumaAccentTheme.current.cursorColor }
 
     /// Border in the morph target state.
     static let morphTargetBorderColor: Color  = .white.opacity(0.25)
@@ -1427,6 +1435,139 @@ struct MorphingCompanionShape: Shape {
 enum LumaMenuBar {
     /// SF Symbol name for the Luma menu bar icon. e.g. "sparkles", "brain", "eye.fill"
     static let iconName = "lightbulb.fill"
+}
+
+// MARK: - Animation ViewModifiers
+//
+// Use via View extensions: .lumaFadeUp(), .lumaScaleIn(), .lumaSlideRight(),
+// .lumaCheckPop(), .lumaPulse(), .lumaRipple(color:).
+//
+// Each "appear" modifier (fadeUp, scaleIn, slideRight, checkPop) fires once when
+// the view first enters the hierarchy — identical to a CSS @keyframes animation
+// with `animation-fill-mode: forwards`.
+//
+// lumaPulse() and lumaRipple() are continuous and repeat forever.
+
+/// Fades in while rising 14pt upward. 0.35s ease.
+struct LumaFadeUpModifier: ViewModifier {
+    @State private var hasAppeared = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared ? 0 : 14)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.35)) {
+                    hasAppeared = true
+                }
+            }
+    }
+}
+
+/// Fades in while scaling from 0.92→1. Spring with slight overshoot.
+struct LumaScaleInModifier: ViewModifier {
+    @State private var hasAppeared = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .scaleEffect(hasAppeared ? 1 : 0.92)
+            .onAppear {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    hasAppeared = true
+                }
+            }
+    }
+}
+
+/// Fades in while sliding from -18pt on the x-axis. 0.3s ease.
+struct LumaSlideRightModifier: ViewModifier {
+    @State private var hasAppeared = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(x: hasAppeared ? 0 : -18)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    hasAppeared = true
+                }
+            }
+    }
+}
+
+/// Pops from scale 0→1.18→1 with spring bounce. Good for checkmarks and success icons.
+struct LumaCheckPopModifier: ViewModifier {
+    @State private var hasAppeared = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .scaleEffect(hasAppeared ? 1 : 0)
+            .onAppear {
+                // The spring overshoot naturally passes through 1.18 on the way to settling at 1.
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                    hasAppeared = true
+                }
+            }
+    }
+}
+
+/// Repeating scale+opacity breathing for "active/processing" indicators.
+/// 0%,100%: opacity 1, scale 1 — 50%: opacity 0.55, scale 0.88.
+struct LumaPulseModifier: ViewModifier {
+    @State private var isPulsing = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPulsing ? 0.55 : 1.0)
+            .scaleEffect(isPulsing ? 0.88 : 1.0)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+    }
+}
+
+/// Overlays an outward ripple ring that expands from scale 0.6→2.2 and fades opacity 0.6→0.
+/// Use on a permission-grant icon to acknowledge the tap.
+struct LumaRippleModifier: ViewModifier {
+    @State private var isAnimating = false
+    let ringColor: Color
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(ringColor, lineWidth: 2)
+                .scaleEffect(isAnimating ? 2.2 : 0.6)
+                .opacity(isAnimating ? 0 : 0.6)
+                .allowsHitTesting(false)
+                .onAppear {
+                    withAnimation(.easeOut(duration: 0.6)) {
+                        isAnimating = true
+                    }
+                }
+        }
+    }
+}
+
+extension View {
+    /// Fades in while rising 14pt. Fires once on appear.
+    func lumaFadeUp() -> some View { modifier(LumaFadeUpModifier()) }
+
+    /// Fades in while scaling from 0.92→1. Fires once on appear.
+    func lumaScaleIn() -> some View { modifier(LumaScaleInModifier()) }
+
+    /// Fades in while sliding from -18pt on the x-axis. Fires once on appear.
+    func lumaSlideRight() -> some View { modifier(LumaSlideRightModifier()) }
+
+    /// Pops from scale 0→1 with spring bounce. Good for checkmarks. Fires once on appear.
+    func lumaCheckPop() -> some View { modifier(LumaCheckPopModifier()) }
+
+    /// Repeating scale+opacity breathing for active/processing states.
+    func lumaPulse() -> some View { modifier(LumaPulseModifier()) }
+
+    /// Outward ripple ring overlay. One-shot — fires on appear.
+    func lumaRipple(color: Color, cornerRadius: CGFloat = 0) -> some View {
+        modifier(LumaRippleModifier(ringColor: color, cornerRadius: cornerRadius))
+    }
 }
 
 // MARK: - Color Utilities

@@ -37,12 +37,6 @@ struct AgentModePanelSection: View {
 
                 Spacer()
 
-                Button(action: showSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(DS.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
                 Text(session.status.displayLabel)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(DS.Colors.textTertiary)

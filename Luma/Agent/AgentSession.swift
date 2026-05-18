@@ -250,6 +250,9 @@ final class AgentSession: ObservableObject, Identifiable {
                     // Summarize the completed session in the background so follow-up
                     // prompts can use a compact summary instead of the raw transcript.
                     self.triggerTaskCompletionSummarization()
+                    // Update the behavioral outlook profile with this agent interaction
+                    // so Luma builds a richer user model over time across all modes.
+                    self.triggerOutlookObservation()
                 }
 
                 // If the task failed, mark the last in-progress step as failed.
@@ -377,17 +380,17 @@ final class AgentSession: ObservableObject, Identifiable {
         // 2. A brief summary of the response (shortSummary, ≤20 words)
         // 3. A direction to the agent bubble for the full details
         // This gives full context without reading the entire response aloud.
-        let lastUserPromptText = entries.last(where: { $0.role == .user })?.text ?? ""
-        let taskExcerpt = String(lastUserPromptText.prefix(60))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
         let responseBrief = shortSummary ?? "Task completed."
 
-        let spokenAnnouncement: String
-        if taskExcerpt.isEmpty {
-            spokenAnnouncement = "\(responseBrief). See the agent bubble for more information."
-        } else {
-            spokenAnnouncement = "\(taskExcerpt). \(responseBrief). See the agent bubble for the full details."
-        }
+        // Only direct the user to the agent bubble when the full response is long enough
+        // that TTS would truncate or read for an unreasonable amount of time (>200 chars).
+        let fullResponseText = latestResponseCard?.rawText ?? ""
+        let responseIsLong = fullResponseText.count > 200
+        let bubbleDirectionSuffix = responseIsLong ? " See the agent bubble for the full details." : ""
+
+        // Speak only the response summary — never echo back the user's original request
+        // as a "title" prefix before the answer.
+        let spokenAnnouncement = "\(responseBrief).\(bubbleDirectionSuffix)"
 
         NotificationCenter.default.post(
             name: Self.taskCompletedNotificationName,
@@ -419,6 +422,19 @@ final class AgentSession: ObservableObject, Identifiable {
             // Custom or OpenRouter model — use as-is (user already chose it)
             return agentModel
         }
+    }
+
+    /// Fires an outlook observation for this agent session on task completion.
+    /// Uses the last user prompt and last assistant reply as the interaction snapshot.
+    /// No-ops silently if either side of the conversation is absent.
+    private func triggerOutlookObservation() {
+        let lastUserInput = entries.last(where: { $0.role == .user })?.text ?? ""
+        let lastAssistantReply = entries.last(where: { $0.role == .assistant })?.text ?? ""
+        guard !lastUserInput.isEmpty, !lastAssistantReply.isEmpty else { return }
+        LumaUserOutlookManager.shared.observeInteractionAsync(
+            userInput: lastUserInput,
+            aiResponse: lastAssistantReply
+        )
     }
 
     /// Reads session state on the main actor, then fires a background Task to call the

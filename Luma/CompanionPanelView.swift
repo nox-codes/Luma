@@ -19,6 +19,11 @@ struct CompanionPanelView: View {
     /// Observed so the panel re-renders on every walkthrough state transition.
     @ObservedObject private var walkthroughEngine = WalkthroughEngine.shared
 
+    // Observing this key causes the panel to re-render when the accent theme changes,
+    // so DS.Colors.accent / DS.Colors.accentText (which read LumaAccentTheme.current)
+    // immediately reflect the new color across all panel UI.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+
     init(companionManager: CompanionManager) {
         self.companionManager = companionManager
         self._tutorialManager = ObservedObject(wrappedValue: companionManager.tutorialManager)
@@ -29,6 +34,10 @@ struct CompanionPanelView: View {
     @State private var showQuitConfirmation = false
     @State private var tutorialPulseScale: CGFloat = 1.0
     @State private var tutorialPulseOpacity: Double = 0.6
+
+    // Status dot pulse animation state — driven by voiceState / walkthrough activity.
+    @State private var statusDotPulseScale: CGFloat = 1.0
+    @State private var statusDotPulseOpacity: Double = 1.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -57,6 +66,7 @@ struct CompanionPanelView: View {
 
                 walkthroughProgressCard
                     .padding(.horizontal, DS.Spacing.lg)
+                    .lumaFadeUp()
 
             } else if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
                 Spacer()
@@ -132,13 +142,7 @@ struct CompanionPanelView: View {
             Spacer()
                 .frame(height: 12)
 
-            Divider()
-                .background(DS.Colors.borderSubtle)
-                .padding(.horizontal, DS.Spacing.lg)
-
             bottomBar
-                .padding(.horizontal, DS.Spacing.lg)
-                .padding(.vertical, DS.Spacing.md)
         }
         .frame(width: 356)
         .background(panelBackground)
@@ -157,6 +161,14 @@ struct CompanionPanelView: View {
             if companionManager.hasCompletedOnboarding {
                 tutorialManager.startIfNeeded()
             }
+            // Show the onboarding wizard window if the user hasn't completed setup,
+            // or if their account/API profiles are missing (e.g. after a data reset).
+            let needsOnboarding = !companionManager.hasCompletedOnboarding
+                || ProfileManager.shared.profiles.isEmpty
+                || AccountManager.shared.currentAccount == nil
+            if needsOnboarding {
+                LumaOnboardingWindowManager.shared.showOnboardingWindow()
+            }
         }
         .sheet(isPresented: $showPINEntryForSettings) {
             PINEntryView(mode: .verify, title: "Enter PIN to open Settings") {
@@ -170,63 +182,70 @@ struct CompanionPanelView: View {
             Button("Quit", role: .destructive) { NSApp.terminate(nil) }
             Button("Cancel", role: .cancel) {}
         }
-        .sheet(isPresented: Binding(
-            // Force onboarding if the flag isn't set, or if the user somehow lost
-            // their account or API profiles (e.g. cleared app data manually).
-            get: {
-                !companionManager.hasCompletedOnboarding
-                    || ProfileManager.shared.profiles.isEmpty
-                    || AccountManager.shared.currentAccount == nil
-            },
-            set: { if !$0 { companionManager.hasCompletedOnboarding = true } }
-        )) {
-            OnboardingWizardView(hasCompletedOnboarding: Binding(
-                get: { companionManager.hasCompletedOnboarding },
-                set: { companionManager.hasCompletedOnboarding = $0 }
-            ))
-            .preferredColorScheme(.dark)
-        }
     }
 
     // MARK: - Header
 
     private var panelHeader: some View {
-        HStack {
-            HStack(spacing: 8) {
-                // Animated status dot
-                Circle()
-                    .fill(statusDotColor)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: statusDotColor.opacity(0.6), radius: 4)
+        HStack(spacing: 8) {
+            // Status dot — 8pt circle with glow. Pulses when Luma is actively working.
+            Circle()
+                .fill(statusDotColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: statusDotColor.opacity(0.5), radius: 5)
+                .scaleEffect(statusDotPulseScale)
+                .opacity(statusDotPulseOpacity)
+                .onChange(of: statusDotShouldPulse) { shouldPulse in
+                    if shouldPulse {
+                        withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                            statusDotPulseScale = 0.88
+                            statusDotPulseOpacity = 0.55
+                        }
+                    } else {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            statusDotPulseScale = 1.0
+                            statusDotPulseOpacity = 1.0
+                        }
+                    }
+                }
 
-                Text("Luma")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(DS.Colors.textPrimary)
-            }
+            Text("Luma")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
 
             Spacer()
 
+            // Status displayed as a pill badge — surface3 background, tertiary text, 10pt font
             Text(statusText)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundColor(DS.Colors.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(DS.Colors.surface3))
 
+            // Dismiss button — 24pt circle with surface3 fill
             Button(action: {
                 NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
             }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(DS.Colors.textTertiary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 24, height: 24)
                     .background(
                         Circle()
-                            .fill(DS.Colors.textPrimary.opacity(0.08))
+                            .fill(DS.Colors.surface3)
                     )
             }
             .buttonStyle(.plain)
             .glowOnHover()
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+    }
+
+    /// True when the status dot should animate with the pulse breathing effect.
+    private var statusDotShouldPulse: Bool {
+        walkthroughEngine.isRunning || companionManager.voiceState != .idle
     }
 
     // MARK: - Permissions Copy
@@ -685,7 +704,7 @@ struct CompanionPanelView: View {
                 }
             } else {
                 Button(action: {
-                    companionManager.triggerOnboarding()
+                    LumaOnboardingWindowManager.shared.showOnboardingWindow()
                 }) {
                     Text("Start")
                         .font(.system(size: 14, weight: .semibold))
@@ -697,299 +716,201 @@ struct CompanionPanelView: View {
                                 .fill(DS.Colors.accent)
                         )
                 }
-                .buttonStyle(.plain)            }
+                .buttonStyle(.plain)
+            }
         }
     }
 
     // MARK: - Permissions
 
     private var settingsSection: some View {
-        VStack(spacing: 2) {
-            Text("PERMISSIONS")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundColor(DS.Colors.textTertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 6)
+        VStack(spacing: 0) {
+            permissionsHeroSection
 
-            microphonePermissionRow
+            Rectangle()
+                .fill(DS.Colors.borderSubtle)
+                .frame(height: 1)
+                .padding(.bottom, 4)
 
-            accessibilityPermissionRow
+            permissionItemRow(
+                label: "Microphone",
+                subtitle: "Used only when you press Ctrl+Option",
+                iconName: "mic",
+                iconColor: Color(hex: "#3B82F6"),
+                isGranted: companionManager.hasMicrophonePermission,
+                grantAction: { grantMicrophonePermission() }
+            )
 
-            screenRecordingPermissionRow
+            permissionItemRow(
+                label: "Accessibility",
+                subtitle: "Points at elements on your screen",
+                iconName: "hand.raised",
+                iconColor: Color(hex: "#8B5CF6"),
+                isGranted: companionManager.hasAccessibilityPermission,
+                grantAction: { WindowPositionManager.requestAccessibilityPermission() }
+            )
+
+            permissionItemRow(
+                label: "Screen Recording",
+                subtitle: "Quit and reopen after granting",
+                iconName: "rectangle.dashed.badge.record",
+                iconColor: Color(hex: "#EC4899"),
+                isGranted: companionManager.hasScreenRecordingPermission,
+                grantAction: { WindowPositionManager.requestScreenRecordingPermission() }
+            )
 
             if companionManager.hasScreenRecordingPermission {
-                screenContentPermissionRow
+                permissionItemRow(
+                    label: "Screen Content",
+                    subtitle: "Required for element detection",
+                    iconName: "eye",
+                    iconColor: Color(hex: "#F59E0B"),
+                    isGranted: companionManager.hasScreenContentPermission,
+                    grantAction: { companionManager.requestScreenContentPermission() }
+                )
             }
-
         }
     }
 
-    private var accessibilityPermissionRow: some View {
-        let isGranted = companionManager.hasAccessibilityPermission
-        return HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "hand.raised")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isGranted ? DS.Colors.textTertiary : DS.Colors.warning)
-                    .frame(width: 16)
+    /// Hero header for the permissions section: blue bulb icon, title, and animated progress bar.
+    private var permissionsHeroSection: some View {
+        let grantedCount = [
+            companionManager.hasMicrophonePermission,
+            companionManager.hasAccessibilityPermission,
+            companionManager.hasScreenRecordingPermission,
+            // Screen content only counts if screen recording is also granted (it unlocks after)
+            companionManager.hasScreenRecordingPermission && companionManager.hasScreenContentPermission,
+        ].filter { $0 }.count
+        let totalRequired = companionManager.hasScreenRecordingPermission ? 4 : 3
 
-                Text("Accessibility")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-            }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Blue gradient bulb icon — same style as HTML PermissionsPanel header
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [Color(hex: "#3380FF"), Color(hex: "#1D4ED8")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 44, height: 44)
+                        .shadow(color: Color(hex: "#2563EB").opacity(0.35), radius: 10, y: 4)
 
-            Spacer()
-
-            if isGranted {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(DS.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("Granted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(DS.Colors.success)
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
                 }
-            } else {
-                HStack(spacing: 6) {
-                    Button(action: {
-                        // Triggers the system accessibility prompt (AXIsProcessTrustedWithOptions)
-                        // on first attempt, then opens System Settings on subsequent attempts.
-                        WindowPositionManager.requestAccessibilityPermission()
-                    }) {
-                        Text("Grant")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(DS.Colors.textOnAccent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(DS.Colors.accent)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    Button(action: {
-                        // Reveals the app in Finder so the user can drag it into
-                        // the Accessibility list if it doesn't appear automatically
-                        // (common with unsigned dev builds).
-                        WindowPositionManager.revealAppInFinder()
-                        WindowPositionManager.openAccessibilitySettings()
-                    }) {
-                        Text("Find App")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(DS.Colors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .stroke(DS.Colors.borderSubtle, lineWidth: 0.8)
-                            )
-                    }
-                    .buttonStyle(.plain)                }
-            }
-        }
-        .padding(.vertical, 6)
-    }
 
-    private var screenRecordingPermissionRow: some View {
-        let isGranted = companionManager.hasScreenRecordingPermission
-        return HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "rectangle.dashed.badge.record")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isGranted ? DS.Colors.textTertiary : DS.Colors.warning)
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Screen Recording")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(DS.Colors.textSecondary)
-
-                    Text(isGranted
-                         ? "Only takes a screenshot when you use the hotkey"
-                         : "Quit and reopen after granting")
-                        .font(.system(size: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Luma needs access")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(DS.Colors.textPrimary)
+                    Text("Grant permissions to get started")
+                        .font(.system(size: 11))
                         .foregroundColor(DS.Colors.textTertiary)
                 }
             }
 
-            Spacer()
-
-            if isGranted {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(DS.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("Granted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(DS.Colors.success)
-                }
-            } else {
-                Button(action: {
-                    // Triggers the native macOS screen recording prompt on first
-                    // attempt (auto-adds app to the list), then opens System Settings
-                    // on subsequent attempts.
-                    WindowPositionManager.requestScreenRecordingPermission()
-                }) {
-                    Text("Grant")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(DS.Colors.accent)
-                        )
-                }
-                .buttonStyle(.plain)            }
-        }
-        .padding(.vertical, 6)
-    }
-
-    private var screenContentPermissionRow: some View {
-        let isGranted = companionManager.hasScreenContentPermission
-        return HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "eye")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isGranted ? DS.Colors.textTertiary : DS.Colors.warning)
-                    .frame(width: 16)
-
-                Text("Screen Content")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-            }
-
-            Spacer()
-
-            if isGranted {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(DS.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("Granted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(DS.Colors.success)
-                }
-            } else {
-                Button(action: {
-                    companionManager.requestScreenContentPermission()
-                }) {
-                    Text("Grant")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(DS.Colors.accent)
-                        )
-                }
-                .buttonStyle(.plain)            }
-        }
-        .padding(.vertical, 6)
-    }
-
-    private var microphonePermissionRow: some View {
-        let isGranted = companionManager.hasMicrophonePermission
-        return HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "mic")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isGranted ? DS.Colors.textTertiary : DS.Colors.warning)
-                    .frame(width: 16)
-
-                Text("Microphone")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-            }
-
-            Spacer()
-
-            if isGranted {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(DS.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("Granted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(DS.Colors.success)
-                }
-            } else {
-                Button(action: {
-                    // Triggers the native macOS microphone permission dialog on
-                    // first attempt. If already denied, opens System Settings.
-                    let status = AVCaptureDevice.authorizationStatus(for: .audio)
-                    if status == .notDetermined {
-                        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-                    } else {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                            NSWorkspace.shared.open(url)
-                        }
+            // Progress bar: accent → purple gradient, fills based on grant count
+            VStack(alignment: .leading, spacing: 4) {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(DS.Colors.surface3)
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [DS.Colors.accent, Color(hex: "#8F46EB")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: max(0, proxy.size.width * CGFloat(grantedCount) / CGFloat(totalRequired)))
+                            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: grantedCount)
                     }
-                }) {
-                    Text("Grant")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(DS.Colors.accent)
-                        )
                 }
-                .buttonStyle(.plain)            }
+                .frame(height: 5)
+
+                Text("\(grantedCount) of \(totalRequired) granted")
+                    .font(.system(size: 10))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
         }
-        .padding(.vertical, 6)
+        .padding(.bottom, 12)
     }
 
-    private func permissionRow(
+    /// Renders a single permission row with a colored icon circle, labels, and a Grant or Granted indicator.
+    private func permissionItemRow(
         label: String,
+        subtitle: String,
         iconName: String,
+        iconColor: Color,
         isGranted: Bool,
-        settingsURL: String
+        grantAction: @escaping () -> Void
     ) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: iconName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isGranted ? DS.Colors.textTertiary : DS.Colors.warning)
-                    .frame(width: 16)
+        HStack(alignment: .center, spacing: 14) {
+            // Colored icon container — subtle fill + border at the permission's accent color
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(iconColor.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(iconColor.opacity(0.22), lineWidth: 1)
+                    )
+                    .frame(width: 44, height: 44)
 
+                Image(systemName: iconName)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(isGranted ? iconColor : DS.Colors.textTertiary)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(isGranted ? DS.Colors.textPrimary : DS.Colors.textSecondary)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
             }
 
             Spacer()
 
             if isGranted {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(DS.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("Granted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(DS.Colors.success)
-                }
+                Text("Granted")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.success)
             } else {
-                Button(action: {
-                    if let url = URL(string: settingsURL) {
-                        NSWorkspace.shared.open(url)
-                    }
-                }) {
+                Button(action: grantAction) {
                     Text("Grant")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(DS.Colors.accent)
-                        )
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(iconColor))
                 }
-                .buttonStyle(.plain)            }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
+        .overlay(
+            Rectangle()
+                .fill(DS.Colors.borderSubtle)
+                .frame(height: 1),
+            alignment: .bottom
+        )
+    }
+
+    /// Requests microphone permission via the native macOS dialog, or opens System Settings if already denied.
+    private func grantMicrophonePermission() {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        if status == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        } else {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
 
@@ -1048,48 +969,88 @@ struct CompanionPanelView: View {
     // MARK: - Model Picker
 
     private var modelPickerRow: some View {
-        // Shows the model set in Settings → API Profile. Tapping the row opens Settings.
+        // Full-width clickable card showing the active model and its provider.
+        // Tapping opens Settings so the user can change the model.
         let activeModelID = ProfileManager.shared.activeProfile?.selectedModel ?? ""
         let displayModelName = activeModelID.isEmpty ? "No model set" : activeModelID
+        let providerName = extractProviderName(from: activeModelID)
 
-        return HStack {
-            Text("Model")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(DS.Colors.textSecondary)
+        return Button(action: openSettingsWithPINCheck) {
+            HStack(spacing: 8) {
+                // CPU chip icon signals this is a model/compute setting
+                Image(systemName: "cpu")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
 
-            Spacer()
-
-            Button(action: openSettingsWithPINCheck) {
                 Text(displayModelName)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(activeModelID.isEmpty ? DS.Colors.textTertiary : DS.Colors.textPrimary)
+                    .font(.system(size: 12))
+                    .foregroundColor(DS.Colors.textSecondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(DS.Colors.textPrimary.opacity(0.06))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
-                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Provider pill — accentSubtle background, accentText color
+                Text(providerName)
+                    .font(.system(size: 10))
+                    .foregroundColor(DS.Colors.accentText)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(DS.Colors.accentSubtle))
             }
-            .buttonStyle(.plain)
-            .help("Change model in Settings")
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(DS.Colors.surface1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+            )
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .help("Change model in Settings")
+        .lumaFadeUp()
+    }
+
+    /// Extracts a short provider display name from an OpenRouter or direct model ID.
+    /// OpenRouter IDs use "provider/model-name" format; direct IDs use the model prefix.
+    private func extractProviderName(from modelID: String) -> String {
+        guard !modelID.isEmpty else { return "—" }
+        if let slashIndex = modelID.firstIndex(of: "/") {
+            let prefix = String(modelID[modelID.startIndex..<slashIndex]).lowercased()
+            switch prefix {
+            case "anthropic":           return "Anthropic"
+            case "google":              return "Google"
+            case "openai":              return "OpenAI"
+            case "meta-llama", "meta":  return "Meta"
+            case "mistralai", "mistral": return "Mistral"
+            case "cohere":              return "Cohere"
+            case "deepseek":            return "DeepSeek"
+            default:                    return prefix.prefix(1).uppercased() + prefix.dropFirst()
+            }
+        }
+        // No slash — infer from model name prefix
+        if modelID.hasPrefix("claude")  { return "Anthropic" }
+        if modelID.hasPrefix("gpt") || modelID.hasPrefix("o1") || modelID.hasPrefix("o3") { return "OpenAI" }
+        if modelID.hasPrefix("gemini")  { return "Google" }
+        return "—"
     }
 
     // MARK: - Bottom Bar
 
-    /// Bottom bar with user avatar on the left and action icons on the right.
+    /// Bottom bar: avatar + username on the left, settings gear + quit on the right.
+    /// Surface1 background with a 1pt top border for visual separation from the panel body.
     private var bottomBar: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             // Left: avatar circle showing user's initials from AccountManager
             if let account = accountManager.currentAccount {
                 LumaAvatarView(initials: account.avatarInitials, size: 28)
+
+                // Username shown next to avatar for quick context
+                Text(account.username.isEmpty ? account.displayName : account.username)
+                    .font(.system(size: 12))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .lineLimit(1)
             } else {
                 // Placeholder avatar when no account exists yet (pre-onboarding)
                 Circle()
@@ -1120,6 +1081,16 @@ struct CompanionPanelView: View {
                 .help("Quit Luma")
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(DS.Colors.surface1)
+        .overlay(
+            // 1pt top border separating the bottom bar from the panel body
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(DS.Colors.borderSubtle),
+            alignment: .top
+        )
     }
 
     /// Opens Settings. If a PIN is set, requires the user to verify it first.
@@ -1146,16 +1117,18 @@ struct CompanionPanelView: View {
     }
 
     private var statusDotColor: Color {
+        if walkthroughEngine.isRunning {
+            // Blue pulsing dot while the walkthrough is executing
+            return DS.Colors.accentText
+        }
         if !companionManager.isOverlayVisible {
-            return DS.Colors.textTertiary
+            return DS.Colors.success
         }
         switch companionManager.voiceState {
         case .idle:
             return DS.Colors.success
-        case .listening:
-            return DS.Colors.blue400
-        case .processing, .responding:
-            return DS.Colors.blue400
+        case .listening, .processing, .responding:
+            return DS.Colors.accentText
         }
     }
 
@@ -1163,12 +1136,18 @@ struct CompanionPanelView: View {
         if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
             return "Setup"
         }
+        if walkthroughEngine.isRunning {
+            return "Walking…"
+        }
+        if companionManager.isAgentModeEnabled {
+            return "Agent mode"
+        }
         if !companionManager.isOverlayVisible {
             return "Ready"
         }
         switch companionManager.voiceState {
         case .idle:
-            return "Active"
+            return "Ready"
         case .listening:
             return "Listening"
         case .processing:

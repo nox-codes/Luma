@@ -46,7 +46,11 @@ final class LumaMobileNetDetector {
     /// VNCoreMLRequest instances can be created per crop in Layer 2 validation.
     /// A single shared VNCoreMLRequest is NOT thread-safe across concurrent
     /// VNImageRequestHandler calls — creating a fresh one per crop is required.
-    private var vnCoreMLModel: VNCoreMLModel?
+    ///
+    /// Exposed as `internal` (not private) so LumaMLEngine.validateCoordinate can
+    /// reuse this already-loaded model rather than calling MLModel(contentsOf:) from disk
+    /// on every invocation, which was causing repeated model compilation and energy waste.
+    private(set) var sharedVNCoreMLModel: VNCoreMLModel?
 
     private(set) var isModelAvailable: Bool = false
 
@@ -65,7 +69,7 @@ final class LumaMobileNetDetector {
 
         do {
             let mlModel = try MLModel(contentsOf: modelURL)
-            vnCoreMLModel = try VNCoreMLModel(for: mlModel)
+            sharedVNCoreMLModel = try VNCoreMLModel(for: mlModel)
             isModelAvailable = true
             LumaLogger.log("[LumaMobileNet] MobileNetV2 loaded from \(modelURL.lastPathComponent) — Layer 2 active")
         } catch {
@@ -206,7 +210,7 @@ final class LumaMobileNetDetector {
     ///
     /// Returns true when MobileNetV2 is not bundled (pass-through: assume content present).
     func coordinateHasContent(at point: CGPoint, in image: CGImage) async -> Bool {
-        guard isModelAvailable, let coreMLModel = vnCoreMLModel else {
+        guard isModelAvailable, let coreMLModel = sharedVNCoreMLModel else {
             // Model not bundled — assume content is present so cursor movement is never blocked.
             return true
         }

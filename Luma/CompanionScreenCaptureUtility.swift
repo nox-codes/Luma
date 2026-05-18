@@ -130,3 +130,43 @@ enum CompanionScreenCaptureUtility {
         return capturedScreens
     }
 }
+
+// MARK: - ScreenCapture
+
+/// Lightweight screenshot helper for attaching to every AI API call.
+/// CompanionScreenCaptureUtility.captureAllScreensAsJPEG() is the richer multi-monitor
+/// path used by the main voice pipeline (includes dimension metadata for POINT mapping).
+/// ScreenCapture.captureFullScreen() is the simpler fallback used by APIClient and
+/// LumaIntentClassifier — captures just the primary display, no dimension metadata needed.
+enum ScreenCapture {
+
+    /// Captures the primary display as JPEG data at 0.7 quality.
+    /// Returns nil if no display is available or Screen Recording permission is not granted.
+    ///
+    /// Uses SCScreenshotManager with the primary SCDisplay so it shares the same
+    /// permission scope as the rest of the ScreenCaptureKit usage in the app.
+    static func captureFullScreen() async -> Data? {
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(
+            false,
+            onScreenWindowsOnly: true
+        ),
+        let primaryDisplay = content.displays.first else { return nil }
+
+        let filter = SCContentFilter(display: primaryDisplay, excludingWindows: [])
+
+        let configuration = SCStreamConfiguration()
+        // Scale to a 1280-wide thumbnail — enough context for the AI, keeps payload small
+        let captureWidth = 1280
+        let aspectRatio = CGFloat(primaryDisplay.width) / CGFloat(primaryDisplay.height)
+        configuration.width = captureWidth
+        configuration.height = Int(CGFloat(captureWidth) / aspectRatio)
+
+        guard let cgImage = try? await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        ) else { return nil }
+
+        return NSBitmapImageRep(cgImage: cgImage)
+            .representation(using: .jpeg, properties: [.compressionFactor: 0.7])
+    }
+}

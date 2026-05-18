@@ -102,6 +102,11 @@ struct BlueCursorView: View {
     let isFirstAppearance: Bool
     @ObservedObject var companionManager: CompanionManager
 
+    // Observing this key causes SwiftUI to re-render the view whenever the user
+    // changes the accent theme in Settings, so DS.Colors.overlayCursorBlue
+    // (which calls LumaAccentTheme.current at render time) picks up the new color.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+
     @State private var cursorPosition: CGPoint
     @State private var isCursorOnThisScreen: Bool
 
@@ -397,9 +402,15 @@ struct BlueCursorView: View {
                     value: triangleRotationDegrees
                 )
 
-            // Blue waveform — replaces the triangle while listening
-            BlueCursorWaveformView(audioPowerLevel: companionManager.currentAudioPowerLevel)
-                .opacity(buddyIsVisibleOnThisScreen && companionManager.voiceState == .listening ? cursorOpacity : 0)
+            // Blue waveform — replaces the triangle while listening.
+            // isListening is passed explicitly so the internal TimelineView can pause
+            // its animation schedule when the waveform is hidden — a 36fps timeline
+            // running at opacity=0 still fires callbacks and burns idle energy.
+            BlueCursorWaveformView(
+                audioPowerLevel: companionManager.currentAudioPowerLevel,
+                isListening: buddyIsVisibleOnThisScreen && companionManager.voiceState == .listening
+            )
+            .opacity(buddyIsVisibleOnThisScreen && companionManager.voiceState == .listening ? cursorOpacity : 0)
                 .position(cursorPosition)
                 .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
                 .animation(.easeIn(duration: 0.15), value: companionManager.voiceState)
@@ -540,6 +551,9 @@ struct BlueCursorView: View {
 
     private func startTrackingCursor() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { _ in
+            #if DEBUG
+            EnergyDebugLogger.timerFired("cursorTracking@60fps", rateLimit: 60)
+            #endif
             let mouseLocation = NSEvent.mouseLocation
             self.isCursorOnThisScreen = self.screenFrame.contains(mouseLocation)
 
@@ -838,28 +852,43 @@ struct BlueCursorView: View {
 /// the user is holding the push-to-talk shortcut and speaking.
 private struct BlueCursorWaveformView: View {
     let audioPowerLevel: CGFloat
+    /// When false, the internal TimelineView uses an empty explicit schedule so it
+    /// never fires. This prevents 36 wakeups/second while the waveform is hidden
+    /// at opacity=0 (the view stays in the tree for smooth cross-fading, but the
+    /// animation schedule should not run when it is not contributing to anything visible).
+    let isListening: Bool
 
     private let barCount = 5
     private let listeningBarProfile: [CGFloat] = [0.4, 0.7, 1.0, 0.7, 0.4]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { barIndex in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(DS.Colors.overlayCursorBlue)
-                        .frame(
-                            width: 2,
-                            height: barHeight(
-                                for: barIndex,
-                                timelineDate: timelineContext.date
-                            )
-                        )
-                }
+        if isListening {
+            // Active schedule: drives the pulsing idle animation and reacts to audio power.
+            TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
+                waveformBars(timelineDate: timelineContext.date)
             }
-            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
-            .animation(.linear(duration: 0.08), value: audioPowerLevel)
+        } else {
+            // Paused schedule: renders a static snapshot with no wakeups.
+            // The view stays in the tree so SwiftUI can cross-fade it smoothly
+            // when voiceState transitions back to .listening.
+            waveformBars(timelineDate: Date())
         }
+    }
+
+    @ViewBuilder
+    private func waveformBars(timelineDate: Date) -> some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<barCount, id: \.self) { barIndex in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(DS.Colors.overlayCursorBlue)
+                    .frame(
+                        width: 2,
+                        height: barHeight(for: barIndex, timelineDate: timelineDate)
+                    )
+            }
+        }
+        .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
+        .animation(.linear(duration: 0.08), value: audioPowerLevel)
     }
 
     private func barHeight(for barIndex: Int, timelineDate: Date) -> CGFloat {

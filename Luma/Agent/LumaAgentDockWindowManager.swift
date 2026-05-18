@@ -14,9 +14,9 @@ import SwiftUI
 // MARK: - Layout Constants
 // Shared between AgentBubbleWindow (hit rects, panel size) and MorphingAgentBubbleView (sizing).
 
-private let kOrbCollapsedSize: CGFloat = 40        // Diameter of the collapsed orb
+private let kOrbCollapsedSize: CGFloat = 64        // Diameter of the collapsed orb (matches AgentBubbleSettings default bubbleSize)
 /// Icon font size inside the collapsed orb. Scaled proportionally with kOrbCollapsedSize.
-private let kOrbIconSize: CGFloat = 10             // Icon pt size inside the orb
+private let kOrbIconSize: CGFloat = 16             // Icon pt size inside the orb
 /// Minimum card width (collapsed responses, no wide tables).
 private let kCardExpandedWidthMin: CGFloat = 300
 /// Maximum card width — reached when tables have many columns or content is wide.
@@ -59,7 +59,7 @@ private let kPhysicsRepulsionStrength: CGFloat = 2800.0
 /// Hard minimum center-to-center gap. If two orbs are closer than this
 /// (e.g., after spawning stacked), they are pushed apart every tick until clear.
 /// Set to orb diameter + 6 pt breathing room so they never visually touch.
-private let kMinBubbleSeparation: CGFloat = kOrbCollapsedSize + 6  // 46 pt
+private let kMinBubbleSeparation: CGFloat = kOrbCollapsedSize + 6  // 70 pt (orb diameter + breathing room)
 /// Screen-edge inset (pixels) that triggers edge repulsion.
 private let kPhysicsEdgeMargin: CGFloat = 20.0
 /// Per-tick velocity multiplier — simulates air resistance / friction.
@@ -67,32 +67,40 @@ private let kPhysicsEdgeMargin: CGFloat = 20.0
 private let kPhysicsVelocityDamping: CGFloat = 0.93
 /// Hard velocity cap (pixels per tick) prevents runaway after dense stacking.
 private let kPhysicsMaxSpeed: CGFloat = 22.0
-/// Energy retained after a hard bounce off a screen edge (0–1).
-/// 0.70 = 70% energy kept, so bubbles travel a good distance after bouncing.
-private let kPhysicsBounceRestitution: CGFloat = 0.70
-/// Seconds after mouse leaves an expanded card before it collapses.
-/// Increase for a more forgiving interaction window.
-private let kCollapseDelaySeconds: Double = 5
-
 // MARK: - Screen-clamping helper (file-private so both AgentBubbleWindow and coordinator can use it)
 
-/// Clamps the panel origin so the ORB stays on screen, not the full panel.
-/// The panel is 340×580 and the orb sits at the TOP of the panel (not the center),
-/// so the card always expands DOWNWARD from the orb — keeping the header visible.
-/// Clamping the orb center (not the panel) lets the panel extend off-screen below
-/// while the orb and card header remain reachable.
+/// Clamps the panel origin so the ORB stays fully on the screen it currently occupies.
+/// Multi-monitor aware: finds the screen whose frame contains the proposed orb center
+/// (or the nearest screen if the orb is between displays) rather than always using
+/// NSScreen.main. This prevents orbs on secondary monitors from clamping to the wrong
+/// display's boundaries.
+///
+/// The panel is kPanelWidth×kPanelHeight and the orb sits at the TOP-RIGHT corner.
+/// The card always expands DOWNWARD and LEFTWARD from the orb — keeping the orb and
+/// card header reachable even when the card body extends below the visible area.
 private func clampWindowOriginToScreen(origin: NSPoint, windowSize: NSSize) -> NSPoint {
-    guard let screen = NSScreen.main else { return origin }
-    let visibleFrame = screen.visibleFrame
     let halfOrb: CGFloat = kOrbCollapsedSize / 2
-    // Orb center is at the TOP-RIGHT of the panel (card grows downward from orb).
-    // orbOffsetX: distance from panel left edge to orb center X.
-    // orbOffsetY: distance from panel bottom edge to orb center Y = panel height - halfOrb.
+    // Orb center offsets relative to the panel's bottom-left origin.
     let orbOffsetX = windowSize.width - kOrbTrailingPadding - halfOrb
-    let orbOffsetY = windowSize.height - halfOrb - kOrbTopPadding   // orb is at the TOP of the panel, inset by top padding
-    // How close to the screen edge the orb center may approach.
+    let orbOffsetY = windowSize.height - halfOrb - kOrbTopPadding
+    let proposedOrbCenter = NSPoint(x: origin.x + orbOffsetX, y: origin.y + orbOffsetY)
+
+    // Find the screen whose frame contains the proposed orb center.
+    // Falls back to the nearest screen when the orb is between displays or off all screens.
+    let targetScreen = NSScreen.screens.first { $0.frame.contains(proposedOrbCenter) }
+        ?? NSScreen.screens.min(by: { a, b in
+            let da = hypot(a.visibleFrame.midX - proposedOrbCenter.x,
+                           a.visibleFrame.midY - proposedOrbCenter.y)
+            let db = hypot(b.visibleFrame.midX - proposedOrbCenter.x,
+                           b.visibleFrame.midY - proposedOrbCenter.y)
+            return da < db
+        })
+        ?? NSScreen.main
+    guard let visibleFrame = targetScreen?.visibleFrame else { return origin }
+
+    // Minimum gap between the orb center and each screen edge.
     let inset: CGFloat = halfOrb + 8
-    // Convert screen-space orb constraints back to panel-origin constraints.
+    // Translate screen-space orb constraints back to panel-origin constraints.
     let minPanelOriginX = visibleFrame.minX + inset - orbOffsetX
     let maxPanelOriginX = visibleFrame.maxX - inset - orbOffsetX
     let minPanelOriginY = visibleFrame.minY + inset - orbOffsetY
@@ -154,44 +162,10 @@ final class AgentBubblePhysicsState: ObservableObject {
 
     /// Called by the coordinator on each physics tick.
     func updatePhysics(sessionIsRunning: Bool, currentTime: TimeInterval) {
-        if sessionIsRunning {
-            // Violent shake: 12 pt in a random direction, updated at 25 Hz.
-            let angle = Double.random(in: 0 ..< Double.pi * 2)
-            let shakeRadius = 3.6
-            physicsOffset = CGSize(
-                width: shakeRadius * cos(angle),
-                height: shakeRadius * sin(angle)
-            )
-        } else {
-            // Idle hover: a Lissajous figure-8 path with a slow breathing envelope.
-            //
-            // • Incommensurate X/Y frequencies (0.68 vs 0.51 rad/s, ratio ≈ 4:3)
-            //   produce a path that never exactly repeats, so the motion reads as
-            //   organic floating rather than a mechanical loop.
-            // • Breathing envelope oscillates between 70% and 100% of peak amplitude
-            //   over ~28s (0.22 rad/s), making the orb feel like it's inhaling and
-            //   exhaling rather than maintaining a fixed drift range.
-            // • Y amplitude (6.5pt) > X amplitude (4.5pt): more vertical than lateral,
-            //   the classic "floating" bias that reads as levitation.
-            // • All offsets stay well under the orb hit rect radius (20pt), so the
-            //   visual center never leaves the tracked hit region.
-            let breathingEnvelope = 0.70 + 0.30 * sin(currentTime * 0.22 + idlePhaseOffset * 0.7)
-            let driftAmplitudeX = 4.5 * breathingEnvelope
-            let driftAmplitudeY = 6.5 * breathingEnvelope
-            let driftX = driftAmplitudeX * cos(currentTime * 0.68 + idlePhaseOffset)
-            let driftY = driftAmplitudeY * sin(currentTime * 0.51 + idlePhaseOffset * 1.3)
-
-            var proximityDx = 0.0
-            var proximityDy = 0.0
-            if proximityShakeFactor > 0 {
-                let angle = Double.random(in: 0 ..< Double.pi * 2)
-                let proximityRadius = proximityShakeFactor * 12.0 * 0.35
-                proximityDx = proximityRadius * cos(angle)
-                proximityDy = proximityRadius * sin(angle)
-            }
-
-            physicsOffset = CGSize(width: driftX + proximityDx, height: driftY + proximityDy)
-        }
+        // No shake or drift in any state — the orb stays perfectly still.
+        // Motion was removed because it made the bubble feel distracting and
+        // unprofessional, especially when multiple agents are active.
+        physicsOffset = .zero
     }
 }
 
@@ -316,6 +290,13 @@ final class AgentBubbleWindow {
     /// transparent panel area doesn't swallow clicks on elements behind it.
     func setMousePassthrough(_ passthrough: Bool) {
         panel.ignoresMouseEvents = passthrough
+    }
+
+    /// Brings the panel to the front, above all other floating panels.
+    /// Called by the coordinator when hover-to-expand fires so this bubble's
+    /// panel is on top and receives all subsequent interaction events.
+    func bringToFront() {
+        panel.orderFrontRegardless()
     }
 
     init(
@@ -463,9 +444,10 @@ final class AgentBubbleWindow {
 final class LumaAgentDockWindowManager {
     private var bubbleWindows: [UUID: AgentBubbleWindow] = [:]
     private var physicsTimer: Timer?
-    /// Tracks when the mouse left each expanded bubble. After kCollapseDelaySeconds
-    /// the card collapses. Cleared immediately when the mouse re-enters.
-    private var collapseTimestamps: [UUID: Date] = [:]
+    /// NSEvent monitor installed when the physics timer is stopped. Fires on mouse moves
+    /// and restarts the physics timer the moment the cursor enters a bubble's vicinity.
+    /// Nil while the physics timer is running — the two are mutually exclusive.
+    private var physicsWakeMonitor: Any?
 
     /// Global NSEvent monitor that collapses any open expanded card when the
     /// user clicks outside all expanded-card rects. Installed while the dock
@@ -502,6 +484,7 @@ final class LumaAgentDockWindowManager {
         for (_, window) in bubbleWindows { window.close() }
         bubbleWindows.removeAll()
         stopPhysicsTimer()
+        removePhysicsWakeMonitor()
         removeTapOutsideMonitor()
     }
 
@@ -526,7 +509,6 @@ final class LumaAgentDockWindowManager {
         for id in bubbleWindows.keys where !incomingSessionIDs.contains(id) {
             bubbleWindows[id]?.close()
             bubbleWindows.removeValue(forKey: id)
-            collapseTimestamps.removeValue(forKey: id)
         }
 
         // Open windows for sessions that are new
@@ -598,8 +580,13 @@ final class LumaAgentDockWindowManager {
     // MARK: Physics timer
 
     private func startPhysicsTimerIfNeeded() {
+        // Remove the wake monitor before starting — the two are mutually exclusive.
+        removePhysicsWakeMonitor()
         guard physicsTimer == nil else { return }
         physicsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 25.0, repeats: true) { [weak self] _ in
+            #if DEBUG
+            EnergyDebugLogger.timerFired("physicsTimer@25Hz", rateLimit: 25)
+            #endif
             self?.tickPhysics()
         }
     }
@@ -607,6 +594,35 @@ final class LumaAgentDockWindowManager {
     private func stopPhysicsTimer() {
         physicsTimer?.invalidate()
         physicsTimer = nil
+    }
+
+    /// Installs a lightweight NSEvent mouse-movement monitor that restarts the physics
+    /// timer when the cursor enters any bubble's vicinity. Only installed when the physics
+    /// timer is stopped — gives zero CPU cost when the user's cursor is far from all bubbles.
+    private func installPhysicsWakeMonitorIfNeeded() {
+        guard physicsWakeMonitor == nil else { return }
+        physicsWakeMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged]
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let mouseLocation = NSEvent.mouseLocation
+                // Expand the orb hit rect by 30 pt on each side so the timer wakes
+                // slightly before the cursor actually enters the orb — feels instant.
+                let isNearAnyBubble = self.bubbleWindows.values.contains { window in
+                    window.orbHitRect.insetBy(dx: -30, dy: -30).contains(mouseLocation)
+                }
+                if isNearAnyBubble {
+                    self.startPhysicsTimerIfNeeded()
+                }
+            }
+        }
+    }
+
+    private func removePhysicsWakeMonitor() {
+        guard let monitor = physicsWakeMonitor else { return }
+        NSEvent.removeMonitor(monitor)
+        physicsWakeMonitor = nil
     }
 
     // MARK: Tap-outside-to-collapse monitor
@@ -636,7 +652,6 @@ final class LumaAgentDockWindowManager {
             let isInsideOrb = window.orbHitRect.contains(clickLocation)
             if !isInsideExpandedCard && !isInsideOrb {
                 window.physicsState.isOrbHovered = false
-                collapseTimestamps.removeValue(forKey: window.sessionID)
             }
         }
     }
@@ -645,56 +660,35 @@ final class LumaAgentDockWindowManager {
         let currentTime = Date.timeIntervalSinceReferenceDate
         let mouseLocation = NSEvent.mouseLocation
 
-        // ── Auto-collapse when mouse leaves an expanded card ───────────────────────
-        // ── Delayed auto-collapse when mouse leaves an expanded card ────────────────
-        // Expand is triggered by tap (TapGesture in MorphingAgentBubbleView).
-        // When mouse leaves both the orb rect and the card rect, record the
-        // departure time. After kCollapseDelaySeconds the card collapses.
-        // Returning the mouse before the delay fires cancels the countdown.
-        let now = Date()
-        for (sessionID, window) in bubbleWindows {
-            // Enable hit testing when the cursor is over the orb (collapsed) or
-            // anywhere inside the expanded card rect. expandedCardHitRect always
-            // reflects the card's actual visible height so all UI elements — title,
-            // text field, voice button, recommended actions — receive clicks correctly.
+        // ── Hover-to-expand and immediate collapse ─────────────────────────────────
+        // Expand fires when the cursor enters the orb hit rect (25 Hz → ~40ms latency).
+        // Collapse fires immediately the moment the cursor leaves both the orb and card
+        // rects — no delay, so the bubble snaps shut as soon as the user moves away.
+        for (_, window) in bubbleWindows {
+            // Enable hit testing only when the cursor is over the orb (collapsed) or
+            // anywhere inside the expanded card rect. This prevents the transparent
+            // panel area from swallowing clicks on elements behind it.
             let cursorOverOrb  = window.orbHitRect.contains(mouseLocation)
             let cursorOverCard = window.physicsState.isOrbHovered
                 && window.expandedCardHitRect.contains(mouseLocation)
             window.setMousePassthrough(!cursorOverOrb && !cursorOverCard)
 
-            guard window.physicsState.isOrbHovered else {
-                // Not expanded — no countdown needed.
-                collapseTimestamps.removeValue(forKey: sessionID)
-                continue
+            // Hover-to-expand: when the cursor enters the orb rect and the card is
+            // not yet open, expand immediately.
+            if cursorOverOrb && !window.physicsState.isOrbHovered {
+                window.physicsState.isOrbHovered = true
+                window.bringToFront()
             }
-            let mouseOverCard = window.expandedCardHitRect.contains(mouseLocation)
-            let mouseOverOrb  = window.orbHitRect.contains(mouseLocation)
-            if mouseOverCard || mouseOverOrb {
-                // Mouse is over the bubble — reset any pending collapse countdown.
-                collapseTimestamps.removeValue(forKey: sessionID)
-            } else {
-                // Mouse has left — start the countdown if not already running.
-                if collapseTimestamps[sessionID] == nil {
-                    collapseTimestamps[sessionID] = now
-                } else if let departureTime = collapseTimestamps[sessionID],
-                          now.timeIntervalSince(departureTime) >= kCollapseDelaySeconds {
-                    // Delay elapsed — collapse the card.
-                    window.physicsState.isOrbHovered = false
-                    collapseTimestamps.removeValue(forKey: sessionID)
-                }
+
+            // Immediate collapse: when the card is open and the cursor has left both
+            // the orb rect and the expanded card rect, collapse without any delay.
+            if window.physicsState.isOrbHovered && !cursorOverOrb && !cursorOverCard {
+                window.physicsState.isOrbHovered = false
             }
         }
 
-        // ── Position physics: repulsion + edge bounce (Euler integration) ──────────
-        guard let screen = NSScreen.main else { return }
-        let visibleFrame = screen.visibleFrame
-        let halfOrb = kOrbCollapsedSize / 2
-        // Soft-boundary: orb center must stay this far from each screen edge.
-        // orbEdgeMaxY (top boundary) is intentionally omitted — no top-edge repulsion.
-        let orbEdgeMinX = visibleFrame.minX + halfOrb + kPhysicsEdgeMargin
-        let orbEdgeMaxX = visibleFrame.maxX - halfOrb - kPhysicsEdgeMargin
-        let orbEdgeMinY = visibleFrame.minY + halfOrb + kPhysicsEdgeMargin
-
+        // ── Position physics: bubble-to-bubble repulsion (Euler integration) ──────
+        // Orbs stop hard at screen edges via clampWindowOriginToScreen — no bounce.
         let allWindows = Array(bubbleWindows.values)
 
         for window in allWindows {
@@ -723,25 +717,6 @@ final class LumaAgentDockWindowManager {
                 forceY += forceMagnitude * (dy / dist)
             }
 
-            // ── Edge repulsion — pushes orbs away from screen boundaries ────────
-            // Using the same inverse-square model so the bounce feels natural.
-            // Note: NO top-edge repulsion. Orbs are designed to live near the
-            // top-right corner (below the menu bar). Adding top repulsion pushes
-            // them downward during the working shake and causes visible drift.
-            let leftGap   = center.x - orbEdgeMinX
-            let rightGap  = orbEdgeMaxX - center.x
-            let bottomGap = center.y - orbEdgeMinY
-
-            if leftGap < kPhysicsRepulsionRadius && leftGap > 0 {
-                forceX += kPhysicsRepulsionStrength / max(leftGap * leftGap, 1)
-            }
-            if rightGap < kPhysicsRepulsionRadius && rightGap > 0 {
-                forceX -= kPhysicsRepulsionStrength / max(rightGap * rightGap, 1)
-            }
-            if bottomGap < kPhysicsRepulsionRadius && bottomGap > 0 {
-                forceY += kPhysicsRepulsionStrength / max(bottomGap * bottomGap, 1)
-            }
-
             // ── Euler integration: F → Δvelocity → Δposition ────────────────────
             var velocity = window.physicsVelocity
             velocity.x = velocity.x * kPhysicsVelocityDamping + forceX * CGFloat(kPhysicsTickInterval)
@@ -756,17 +731,14 @@ final class LumaAgentDockWindowManager {
             }
             window.physicsVelocity = velocity
 
-            // Move panel if velocity is non-trivial.
+            // Move panel if velocity is non-trivial. Hard screen-edge clamping in
+            // applyPhysicsOrigin ensures orbs stop at the boundary without bouncing.
             if speed > 0.05 {
                 let proposedOrigin = NSPoint(
                     x: window.currentPanelOrigin.x + velocity.x,
                     y: window.currentPanelOrigin.y + velocity.y
                 )
-                let bounce = window.applyPhysicsOrigin(proposedOrigin)
-                // Reflect the velocity component that hit a hard screen edge,
-                // with 40% energy loss so it settles rather than bouncing forever.
-                if bounce.bouncedX { window.physicsVelocity.x *= -kPhysicsBounceRestitution }
-                if bounce.bouncedY { window.physicsVelocity.y *= -kPhysicsBounceRestitution }
+                window.applyPhysicsOrigin(proposedOrigin)
             }
         }
 
@@ -846,6 +818,18 @@ final class LumaAgentDockWindowManager {
                 sessionIsRunning: window.sessionIsRunning,
                 currentTime: currentTime
             )
+        }
+
+        // Auto-stop when truly idle: no session running, no bubble hovered, no residual velocity.
+        // Installs a zero-cost NSEvent wake monitor so the timer restarts the moment
+        // the cursor approaches any bubble — zero timers firing at true idle.
+        let anySessionActive = bubbleWindows.values.contains { $0.sessionIsRunning }
+        let anyBubbleHovered = bubbleWindows.values.contains { $0.physicsState.isOrbHovered }
+        let anyBubbleMoving = bubbleWindows.values.contains { hypot($0.physicsVelocity.x, $0.physicsVelocity.y) > 0.05 }
+
+        if !anySessionActive && !anyBubbleHovered && !anyBubbleMoving {
+            stopPhysicsTimer()
+            installPhysicsWakeMonitorIfNeeded()
         }
     }
 }
@@ -1482,69 +1466,35 @@ private func estimatedResponseContentHeight(for responseText: String, cardWidth:
     return max(totalHeight, kResponseScrollMinHeight)
 }
 
-// MARK: - OrbAccentStatusDot
-
-/// Single status-aware accent dot that floats at the top-right of the collapsed orb.
-/// Idle/stopped → grey, working/starting → pulsing orange, ready → green, failed → red.
-/// Fades to transparent as the orb morphs into the card.
-private struct OrbAccentStatusDot: View {
-    let status: AgentSessionStatus
-    let isHovered: Bool
-    @State private var isPulsingLarge = false
-
-    private var dotColor: Color {
-        switch status {
-        case .stopped:            return Color.gray.opacity(0.55)
-        case .ready:              return Color(red: 0.35, green: 0.78, blue: 0.45)
-        case .starting, .running: return Color(red: 1.0, green: 0.62, blue: 0.22)
-        case .failed:             return Color(red: 1.0, green: 0.30, blue: 0.30)
-        }
-    }
-
-    private var isPulsing: Bool { status == .running || status == .starting }
-
-    var body: some View {
-        Circle()
-            .fill(dotColor)
-            .frame(width: kOrbStatusDotSize, height: kOrbStatusDotSize)
-            .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 1))
-            // Subtle pulse: scale only varies by ~12% so the dot doesn't jump
-            .scaleEffect(isPulsing && isPulsingLarge ? 0.88 : 1.0)
-            .opacity(isHovered ? 0.0 : (isPulsing && isPulsingLarge ? 0.65 : 1.0))
-            .animation(
-                isPulsing ? .easeInOut(duration: 0.85).repeatForever(autoreverses: true) : .default,
-                value: isPulsingLarge
-            )
-            .animation(.easeOut(duration: 0.15), value: isHovered)
-            .onAppear { isPulsingLarge = isPulsing }
-            .onChange(of: isPulsing) { active in isPulsingLarge = active }
-    }
-}
-
 // MARK: - MorphingAgentBubbleView
 
 /// A single SwiftUI view that IS both the orb and the card.
 ///
-/// Collapsed state (isExpanded = false):
-///   • kOrbCollapsedSize circle, corner radius = half (full circle)
-///   • Rich radial gradient with dark rim vignette for glassy depth
-///   • Agent icon colored in session.glowColor, centered, with accent inset glow
-///   • Tap gesture expands to card; physics timer collapses when mouse leaves
-///   • Physics shake offset applied
+/// Collapsed state (expansionProgress = 0.0):
+///   • orbSize circle, corner radius = half (full circle)
+///   • The style-specific AgentOrbView at full opacity, card background transparent
 ///
-/// Expanded state (isExpanded = true):
-///   • kCardExpandedWidth × kCardExpandedHeight rounded rect, corner radius = 20
+/// Expanded state (expansionProgress = 1.0):
+///   • currentExpandedWidth × currentExpandedHeight rounded rect, corner radius = 14
 ///   • Dark card: response text, recommended follow-ups, text field, voice button
 ///   • Drag from header strip to reposition; outer drag disabled
 ///
-/// All opacity layers read `isExpanded` directly — no async delays — so orb and
-/// card crossfade simultaneously in the same spring context with no transparent gap.
+/// All dimensions, corner radii, and opacities are interpolated from expansionProgress
+/// so every animation frame produces the correct intermediate shape — true shape morphing
+/// from a circle to a rounded rect rather than a simple fade between two states.
+/// Each bubble style contributes a unique per-style visual effect at the midpoint.
 private struct MorphingAgentBubbleView: View {
     @ObservedObject var session: AgentSession
     @ObservedObject var physicsState: AgentBubblePhysicsState
 
-    /// True when this bubble is in its expanded card state.
-    let isExpanded: Bool
+    /// Expansion progress: 0.0 = fully collapsed orb, 1.0 = fully expanded card.
+    /// Animated by AgentBubbleRootView using a style-specific spring curve.
+    let expansionProgress: CGFloat
+    /// Whether the bubble is primarily in card state — used for boolean guards
+    /// (drag gesture check) that don't need the interpolated float value.
+    private var isExpanded: Bool { expansionProgress > 0.5 }
+    /// Orb diameter from the user's bubbleSize setting — matches AgentOrbView's diameter.
+    private var orbSize: CGFloat { CGFloat(bubbleSettingsManager.settings.bubbleSize) }
     let onDragStarted: () -> Void
     let onDragUpdated: () -> Void
     let onDragEnded: () -> Void
@@ -1580,6 +1530,9 @@ private struct MorphingAgentBubbleView: View {
     /// Default of 80pt is a reasonable pre-measurement estimate so the card isn't
     /// initially too small before the first GeometryReader callback fires.
     @State private var measuredBottomControlsNaturalHeight: CGFloat = 80
+    /// Bubble settings manager — used to read the current style for the card header mini icon.
+    /// Observing the shared singleton ensures the mini icon re-renders when the style changes.
+    @ObservedObject private var bubbleSettingsManager = AgentBubbleSettingsManager.shared
 
     /// The active expanded card width — uses the response-derived adaptive width
     /// clamped between the minimum and maximum allowed values.
@@ -1587,20 +1540,35 @@ private struct MorphingAgentBubbleView: View {
         max(kCardExpandedWidthMin, min(dynamicExpandedWidth, kCardExpandedWidthMax))
     }
 
-    private var currentWidth: CGFloat { isExpanded ? currentExpandedWidth : kOrbCollapsedSize }
+    private var currentWidth: CGFloat {
+        orbSize + (currentExpandedWidth - orbSize) * expansionProgress
+    }
 
     /// Adaptive card height from measurements.
     /// The response area has no artificial upper bound — it grows to show all lines of text
     /// and full markdown tables. The total card height is capped at kCardExpandedHeightMax;
     /// if content exceeds that, the response region scrolls within the card.
     private var idealExpandedCardHeight: CGFloat {
-        let estimatedHeaderAndDividerHeight: CGFloat = 45
-        let controlsHeight = max(measuredBottomControlsNaturalHeight, 80)
-        // Response area: at least kResponseScrollMinHeight so the card never collapses to
+        let estimatedHeaderAndDividerHeight: CGFloat = 46  // header (45pt) + 1pt divider
+        // Response area: floored at kResponseScrollMinHeight so the card never collapses to
         // zero before GeometryReader fires. No upper cap — kCardExpandedHeightMax handles it.
         let responseAreaHeight = max(measuredResponseContentNaturalHeight, kResponseScrollMinHeight)
+        // Controls height estimate: the input zone alone is ~76pt. Recommended actions now
+        // render as pill buttons in a single horizontal row, adding ~54pt regardless of count.
+        // GeometryReader overrides this via onPreferenceChange if its measurement differs.
+        let suggestedActionsCount = min(
+            (session.latestResponseCard?.suggestedActions ?? []).count, 2
+        )
+        let estimatedControlsHeightFromActions: CGFloat = suggestedActionsCount > 0
+            ? 76 + 54
+            : 76
+        // Use whichever is larger: measured or estimated — so the card never clips.
+        let controlsHeight = max(measuredBottomControlsNaturalHeight, estimatedControlsHeightFromActions)
         let total = estimatedHeaderAndDividerHeight + responseAreaHeight + controlsHeight
-        return min(max(total, kCardExpandedHeightCompact), kCardExpandedHeightMax)
+        // 5% extra breathing room: ensures content never clips at the bottom edge.
+        // kCardExpandedHeightMax ceiling still applies — extreme content scrolls.
+        let totalWithPadding = total * 1.05
+        return min(max(totalWithPadding, kCardExpandedHeightCompact), kCardExpandedHeightMax)
     }
 
     /// Card height per state:
@@ -1614,126 +1582,66 @@ private struct MorphingAgentBubbleView: View {
         }
         return idealExpandedCardHeight
     }
-    private var currentHeight: CGFloat { isExpanded ? currentExpandedHeight : kOrbCollapsedSize }
-    private var currentCornerRadius: CGFloat { isExpanded ? 20 : kOrbCollapsedSize / 2 }
+    private var currentHeight: CGFloat {
+        orbSize + (currentExpandedHeight - orbSize) * expansionProgress
+    }
+    private var currentCornerRadius: CGFloat {
+        orbSize / 2 + (14 - orbSize / 2) * expansionProgress
+    }
 
     var body: some View {
         ZStack {
-            // ── Card background (expanded state) ─────────────────────────────
-            // Fades in as the orb gradient fades out. Both layers always present
-            // so their combined opacity is always 1 — no transparent gap.
-            Color(red: 0.04, green: 0.03, blue: 0.09)
-                .opacity(isExpanded ? 1 : 0)
+            // ── Card background — fades in as expansion progresses ─────────────
+            // #141614 = JSX T.s1 — the design system card surface colour.
+            Color(hex: "#141614")
+                .opacity(Double(expansionProgress))
 
-            // ── Orb visual layers — shake offset applied here ONLY ───────────────
-            // The icon and card content are siblings outside this Group so they
-            // remain anchored to the orb center during the shake animation.
-            Group {
-                // Solid dark base — gives the orb a clean, clearly defined circular
-                // container so the boundary reads as a crisp circle rather than a
-                // gradient edge. Sits below all other layers.
-                Circle()
-                    .fill(Color(red: 0.07, green: 0.05, blue: 0.13))
-                    .opacity(isExpanded ? 0 : 1)
-
-                // Vibrant radial gradient, light source upper-left.
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: session.glowColor.opacity(0.95), location: 0.0),
-                        .init(color: session.glowColor.opacity(0.75), location: 0.48),
-                        .init(color: Color(red: 0.05, green: 0.02, blue: 0.12), location: 1.0),
-                    ]),
-                    center: UnitPoint(x: 0.30, y: 0.26),
-                    startRadius: 2,
-                    endRadius: kOrbCollapsedSize * 0.55
+            // ── Per-style ambient background — subtle continuous animation behind card content ──
+            // Fades in with the card and plays on every animation frame so the expanded state
+            // feels alive. Low opacity (~6-13%) ensures it never competes with the response text.
+            // Rate-limited to 8fps at idle: slow gradients (9°/s rotation, 0.045u/s shimmer)
+            // are visually indistinguishable at 8fps vs 60fps, saving ~85% of render cost.
+            let ambientFrameInterval: TimeInterval = (session.status == .running || session.status == .starting) ? 1.0/60.0 : 1.0/8.0
+            TimelineView(.animation(minimumInterval: ambientFrameInterval)) { ambientTimeline in
+                expandedCardAmbientBackground(
+                    currentTime: ambientTimeline.date.timeIntervalSinceReferenceDate
                 )
-                .opacity(isExpanded ? 0 : 1)
-
-                // Dark vignette at orb edge creates glassy bowl depth.
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: Color.clear, location: 0.44),
-                        .init(color: Color.black.opacity(0.55), location: 1.0)
-                    ]),
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: kOrbCollapsedSize * 0.46
-                )
-                .opacity(isExpanded ? 0 : 1)
-
-                // Specular highlights — offsets scaled for kOrbCollapsedSize = 64pt.
-                Ellipse()
-                    .fill(Color.white.opacity(0.28))
-                    .frame(width: 21, height: 9)
-                    .rotationEffect(.degrees(-22))
-                    .offset(x: -9, y: -15)
-                    .blur(radius: 1)
-                    .blendMode(.screen)
-                    .opacity(isExpanded ? 0 : 1)
-
-                Ellipse()
-                    .fill(Color.white.opacity(0.72))
-                    .frame(width: 7, height: 4)
-                    .offset(x: -12, y: -17)
-                    .blendMode(.screen)
-                    .opacity(isExpanded ? 0 : 1)
             }
+            .opacity(Double(expansionProgress))
+            .allowsHitTesting(false)
 
-            // ── Agent icon (collapsed state) ─────────────────────────────────
-            // kOrbIconSize controls the pt size — adjust via the constant or
-            // UserDefaults key "luma.agentBubble.iconSize".
-            // The icon is colored in the session accent color, then shadowed with:
-            //   • accent-color glow (simulates backlit inset illumination)
-            //   • sharp black drop shadow (inset depth)
-            // offset(y: -1) corrects for SF Symbol optical baseline shift — most
-            // filled shapes (triangle, diamond, etc.) render slightly below the
-            // geometric midpoint of their bounding box.
-            Image(systemName: session.iconShape.systemImageName)
-                .font(.system(size: kOrbIconSize, weight: .heavy))
-                .foregroundColor(session.glowColor)
-                // Layered glow: tight bright core → wide soft halo, all in the session's accent color.
-                .shadow(color: session.glowColor.opacity(1.0), radius: 6)
-                .shadow(color: session.glowColor.opacity(0.75), radius: 12)
-                .shadow(color: session.glowColor.opacity(0.40), radius: 20)
-                // Black drop shadow for inset depth (keeps icon readable against gradient)
-                .shadow(color: Color.black.opacity(0.70), radius: 2, x: 0, y: 1)
-                .offset(y: -1)
-                .frame(width: kOrbCollapsedSize, height: kOrbCollapsedSize, alignment: .center)
-                .opacity(isExpanded ? 0 : 1)
-
-            // ── Card content (expanded state) ─────────────────────────────────
+            // ── Card content — fades in as expansion progresses ──────────────────
             cardContentView
-                .opacity(isExpanded ? 1 : 0)
+                .opacity(Double(expansionProgress))
         }
         .frame(width: currentWidth, height: currentHeight)
         .clipShape(RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous))
+        // Specular highlight: white gradient ring visible on the collapsed orb,
+        // fades out as the morph progresses toward the card form.
         .overlay(
             RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous)
                 .stroke(
                     LinearGradient(
-                        colors: [
-                            Color.white.opacity(isExpanded ? 0.09 : 0.38),
-                            Color.white.opacity(0.04)
-                        ],
+                        colors: [Color.white.opacity(0.38), Color.white.opacity(0.04)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
                     lineWidth: 1.5
                 )
+                .opacity(Double(1 - expansionProgress))
         )
-        // compositingGroup() rasterises the clipped view into a single flat bitmap
-        // so SwiftUI computes the shadow from the circular alpha channel, not the
-        // rectangular bounding rect of the inner ZStack. Without this the glow renders
-        // as a rectangular halo instead of a circular one.
-        .compositingGroup()
-        .shadow(color: session.glowColor.opacity(isExpanded ? 0.18 : 0.45), radius: isExpanded ? 10 : 14)
-        .shadow(color: Color.black.opacity(0.45), radius: 8, y: 3)
-        // Collapsed-state drag — disabled when expanded to prevent conflicts
-        // with the card header's own drag gesture
+        // Card border: solid design-system border colour, fades in as the morph completes.
+        .overlay(
+            RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous)
+                .stroke(Color(hex: "#2E322E"), lineWidth: 1.0)
+                .opacity(Double(expansionProgress))
+        )
+        // Collapsed-state drag — disabled while expanding or fully expanded to
+        // prevent conflicts with the card header's own drag gesture.
         .gesture(
             DragGesture(minimumDistance: 4, coordinateSpace: .global)
                 .onChanged { _ in
-                    guard !isExpanded else { return }
+                    guard expansionProgress < 0.5 else { return }
                     if !isDragActive { isDragActive = true; onDragStarted() }
                     onDragUpdated()
                 }
@@ -1745,9 +1653,17 @@ private struct MorphingAgentBubbleView: View {
         // changes. onAppear pre-sizes both dimensions immediately so the card opens
         // at the correct width and height on first tap.
         .onAppear {
-            guard let responseText = session.latestResponseCard?.rawText else { return }
+            guard let responseCard = session.latestResponseCard else { return }
+            let responseText = responseCard.rawText
             let initialWidth = requiredCardWidthForResponseText(responseText)
             let initialContentHeight = estimatedResponseContentHeight(for: responseText, cardWidth: initialWidth)
+            // Estimate controls height from suggested actions count so the card opens
+            // at the correct size immediately — no post-render jump.
+            // Pills render in a single horizontal row, so height is fixed (~54pt) regardless of count.
+            let actionsCount = min(responseCard.suggestedActions.count, 2)
+            let estimatedControlsHeight: CGFloat = actionsCount > 0
+                ? 76 + 54
+                : 76
             // No animation — the card isn't visible yet so snapping is correct.
             if abs(initialWidth - dynamicExpandedWidth) > 4 {
                 dynamicExpandedWidth = initialWidth
@@ -1755,13 +1671,15 @@ private struct MorphingAgentBubbleView: View {
             }
             if abs(initialContentHeight - measuredResponseContentNaturalHeight) > 4 {
                 measuredResponseContentNaturalHeight = initialContentHeight
-                let estimatedCardHeight = min(
-                    max(45 + initialContentHeight + max(measuredBottomControlsNaturalHeight, 80),
-                        kCardExpandedHeightCompact),
-                    kCardExpandedHeightMax
-                )
-                physicsState.measuredExpandedCardHeight = estimatedCardHeight
             }
+            // Use the larger of measured and estimated controls height.
+            let effectiveControlsHeight = max(measuredBottomControlsNaturalHeight, estimatedControlsHeight)
+            let estimatedCardHeight = min(
+                max((46 + initialContentHeight + effectiveControlsHeight) * 1.05,
+                    kCardExpandedHeightCompact),
+                kCardExpandedHeightMax
+            )
+            physicsState.measuredExpandedCardHeight = estimatedCardHeight
         }
         // When the response card changes, compute both width (from column content widths)
         // and height (from row count and block types) before GeometryReader fires.
@@ -1769,7 +1687,9 @@ private struct MorphingAgentBubbleView: View {
         // starting at kResponseScrollMinHeight and springing upward after measurement.
         // GeometryReader still fires and overrides via onPreferenceChange if the actual
         // rendered height differs from the estimate by more than 2pt.
-        .onChange(of: session.latestResponseCard?.rawText) { responseText in
+        .onChange(of: session.latestResponseCard?.rawText) { _ in
+            let responseCard = session.latestResponseCard
+            let responseText = responseCard?.rawText
             let neededWidth: CGFloat
             let estimatedContentHeight: CGFloat
             if let text = responseText {
@@ -1786,13 +1706,19 @@ private struct MorphingAgentBubbleView: View {
                 }
                 physicsState.measuredExpandedCardWidth = neededWidth
             }
-            // Height — pre-size from estimate; GeometryReader overrides in onPreferenceChange
-            // if the actual measured height differs by > 2pt.
+            // Height — pre-size from estimate, accounting for suggested actions.
+            // GeometryReader overrides via onPreferenceChange if actual measured height differs.
             withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
                 measuredResponseContentNaturalHeight = estimatedContentHeight
             }
+            // Pills render in a single horizontal row, so height is fixed (~54pt) regardless of count.
+            let actionsCount = min(responseCard?.suggestedActions.count ?? 0, 2)
+            let estimatedControlsHeight: CGFloat = actionsCount > 0
+                ? 76 + 54
+                : 76
+            let effectiveControlsHeight = max(measuredBottomControlsNaturalHeight, estimatedControlsHeight)
             let estimatedCardHeight = min(
-                max(45 + estimatedContentHeight + max(measuredBottomControlsNaturalHeight, 80),
+                max((46 + estimatedContentHeight + effectiveControlsHeight) * 1.05,
                     kCardExpandedHeightCompact),
                 kCardExpandedHeightMax
             )
@@ -1802,49 +1728,203 @@ private struct MorphingAgentBubbleView: View {
         }
     }
 
+    // MARK: - Expanded card ambient background
+
+    /// Returns a continuously-animated per-style background rendered behind card content.
+    /// Driven by `currentTime` from a `TimelineView(.animation)` so it loops smoothly at the
+    /// display refresh rate. Subtle enough not to compete with response text, vivid enough
+    /// to keep the expanded card feeling alive. Fades in with `expansionProgress`.
+    @ViewBuilder
+    private func expandedCardAmbientBackground(currentTime: TimeInterval) -> some View {
+        let style = bubbleSettingsManager.settings.style
+        let glowColor = session.glowColor
+
+        switch style {
+        case .aurora:
+            // Slowly rotating angular gradient sweeping from the orb corner.
+            // Full rotation every ~40 s at 9°/s — barely perceptible drift.
+            AngularGradient(
+                colors: [
+                    glowColor.opacity(0.20),
+                    Color.white.opacity(0.06),
+                    glowColor.opacity(0.14),
+                    glowColor.opacity(0.26),
+                    Color.white.opacity(0.04),
+                    glowColor.opacity(0.16),
+                    glowColor.opacity(0.20)
+                ],
+                center: .topTrailing,
+                angle: .degrees(currentTime * 9.0)
+            )
+            .blendMode(.screen)
+
+        case .crystal:
+            // A slow diagonal shimmer band drifts left-to-right across the card surface,
+            // suggesting light catching a crystal face — one sweep every ~22 s.
+            let sweepPosition = (currentTime * 0.045).truncatingRemainder(dividingBy: 1.6) - 0.3
+            LinearGradient(
+                colors: [.clear, Color.white.opacity(0.10), glowColor.opacity(0.14), Color.white.opacity(0.08), .clear],
+                startPoint: UnitPoint(x: sweepPosition, y: 0.0),
+                endPoint: UnitPoint(x: sweepPosition + 0.4, y: 1.0)
+            )
+            .blendMode(.screen)
+
+        case .inkDrop:
+            // Two blurred ellipses drift slowly on independent Lissajous paths, giving
+            // the card a wet, organic background that echoes the collapsed blob's motion.
+            let inkPhase = currentTime * 0.18
+            ZStack {
+                Ellipse()
+                    .fill(glowColor.opacity(0.20))
+                    .frame(width: currentExpandedWidth * 0.65, height: currentExpandedHeight * 0.45)
+                    .offset(
+                        x: CGFloat(sin(inkPhase)) * currentExpandedWidth * 0.18,
+                        y: CGFloat(cos(inkPhase * 0.77)) * currentExpandedHeight * 0.18
+                    )
+                    .blur(radius: 30)
+                Ellipse()
+                    .fill(glowColor.opacity(0.12))
+                    .frame(width: currentExpandedWidth * 0.45, height: currentExpandedHeight * 0.35)
+                    .offset(
+                        x: CGFloat(cos(inkPhase * 1.33)) * currentExpandedWidth * 0.22,
+                        y: CGFloat(sin(inkPhase * 0.55)) * currentExpandedHeight * 0.22
+                    )
+                    .blur(radius: 22)
+            }
+            .blendMode(.screen)
+
+        case .spectrum:
+            // A slow radial pulse breathes from the orb corner — like a subwoofer hum
+            // felt rather than heard. Pulse period: ~2.9 s.
+            let spectrumPulse = 0.5 + sin(currentTime * 2.2) * 0.5
+            RadialGradient(
+                colors: [glowColor.opacity(0.20 * spectrumPulse), glowColor.opacity(0.06), .clear],
+                center: .topTrailing,
+                startRadius: 8,
+                endRadius: 160
+            )
+            .blendMode(.screen)
+
+        case .orbital:
+            // Three dashed concentric rings rotate at slightly different speeds from the
+            // orb corner, suggesting orbital trajectories continuing behind the card text.
+            Canvas { context, size in
+                let cx = size.width - orbSize / 2
+                let cy = orbSize / 2
+                // Outer rings rotate more slowly than inner — 72°/min for innermost.
+                let baseAngularSpeed = currentTime * 0.20  // radians/s
+                for ringIndex in 0..<3 {
+                    let ringRadius: CGFloat = 60 + CGFloat(ringIndex) * 58
+                    let angularOffset = baseAngularSpeed * (1.0 + Double(ringIndex) * 0.12)
+                    let segmentCount = 14
+                    let segmentArcLength = Double.pi * 2.0 / Double(segmentCount)
+                    for segmentIndex in 0..<segmentCount {
+                        let startAngle = Double(segmentIndex) * segmentArcLength + angularOffset
+                        let endAngle = startAngle + segmentArcLength * 0.50
+                        var segmentPath = Path()
+                        segmentPath.addArc(
+                            center: CGPoint(x: cx, y: cy),
+                            radius: ringRadius,
+                            startAngle: .radians(startAngle),
+                            endAngle: .radians(endAngle),
+                            clockwise: false
+                        )
+                        let segmentOpacity: Double = 0.16 - Double(ringIndex) * 0.04
+                        context.stroke(
+                            segmentPath,
+                            with: .color(glowColor.opacity(segmentOpacity)),
+                            lineWidth: 1.0
+                        )
+                    }
+                }
+            }
+            .blendMode(.screen)
+
+        case .prismCard:
+            // A slow prismatic shimmer sweeps diagonally, more gradual than the morph transition —
+            // one sweep every ~17 s, echoing light moving across a held card.
+            let prismSweepPosition = (currentTime * 0.06).truncatingRemainder(dividingBy: 1.8) - 0.2
+            LinearGradient(
+                colors: [.clear, Color.white.opacity(0.12), glowColor.opacity(0.16), Color.white.opacity(0.10), .clear],
+                startPoint: UnitPoint(x: prismSweepPosition, y: 0.0),
+                endPoint: UnitPoint(x: prismSweepPosition + 0.35, y: 1.0)
+            )
+            .blendMode(.screen)
+        }
+    }
+
     // MARK: - Card content
 
-    /// Full card layout: header + divider + body, filling the fixed card frame.
+    /// Full card layout: header + divider + body with a left accent strip overlaid.
+    /// The accent strip is 3pt wide, inset 14pt from top and bottom — matching the
+    /// JSX `Card` component's `position:'absolute', left:0, top:14, bottom:14` strip.
     private var cardContentView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            cardHeader
-            Rectangle()
-                .fill(session.glowColor.opacity(0.22))
-                .frame(height: 1)
-            cardBody
+        ZStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 0) {
+                cardHeader
+                Rectangle()
+                    .fill(Color(hex: "#2E322E"))
+                    .frame(height: 1)
+                cardBody
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            // Left accent strip: 3pt wide, inset 14pt from both top and bottom edges.
+            // borderRadius:'0 3px 3px 0' from JSX = small trailing corner radius.
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 14)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [session.glowColor, session.glowColor.opacity(0.60)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+                    .shadow(color: session.glowColor.opacity(0.55), radius: 5)
+                Color.clear.frame(height: 14)
+            }
+            .frame(width: 3)
+            .frame(maxHeight: .infinity)
+            .allowsHitTesting(false)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var cardHeader: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(statusAccentColor)
-                .frame(width: 7, height: 7)
-                .shadow(color: statusAccentColor.opacity(0.8), radius: 3)
+        HStack(spacing: 9) {
+            // Style-aware mini icon (28pt) — visually matches the collapsed orb.
+            // Reads the current bubble style from AgentBubbleSettingsManager so the
+            // card header always reflects the style the user has selected.
+            StyleAwareMiniIconView(
+                style: bubbleSettingsManager.settings.style,
+                accentColor: session.glowColor,
+                isWorking: session.status == .running || session.status == .starting,
+                size: 28
+            )
 
-            Text(session.title.uppercased())
-                .font(.system(size: 11, weight: .heavy))
-                .foregroundColor(session.glowColor.opacity(0.9))
-                .kerning(0.77)
+            // Agent name — sentence-case for a friendly, approachable card header.
+            Text(session.title)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(Color(hex: "#ECEEED"))
                 .lineLimit(1)
 
             Spacer()
 
-            statusChipView
+            // Status badge pill (Working / Idle / Done / Failed / Stopped)
+            statusBadgeView
 
+            // Dismiss button
             Button(action: onDismiss) {
                 Text("✕")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(0.85))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(hex: "#9BA39D"))
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 13)
-        .padding(.bottom, 9)
-        .background(Color.white.opacity(0.03))
-        // Drag the entire expanded card by grabbing this header strip
+        .padding(.leading, 16)
+        .padding(.trailing, 13)
+        .padding(.top, 11)
+        .padding(.bottom, 10)
+        .background(Color.white.opacity(0.015))
+        // Drag the entire expanded card by grabbing this header strip.
         .gesture(
             DragGesture(minimumDistance: 4, coordinateSpace: .global)
                 .onChanged { _ in
@@ -1918,7 +1998,7 @@ private struct MorphingAgentBubbleView: View {
                         } else {
                             Text(sessionIsRunning ? "Starting..." : "Waiting for response...")
                                 .font(.system(size: 11))
-                                .foregroundColor(Color.white.opacity(0.28))
+                                .foregroundColor(Color(hex: "#555D58"))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .italic()
                         }
@@ -1950,129 +2030,164 @@ private struct MorphingAgentBubbleView: View {
             .frame(height: responseScrollViewHeight)
 
             // ── Region 2: fixed bottom controls ────────────────────────────────
-            // Always pinned to the bottom of the card — never clipped by rich content.
-            VStack(alignment: .leading, spacing: 7) {
+            // Input zone with JSX dark surface (#1A1C1A) and #2E322E top border.
+            // Recommended actions render above the input zone when available.
+            VStack(alignment: .leading, spacing: 0) {
 
-                // Recommended follow-up actions (from <NEXT_ACTIONS> tags)
+                // Recommended follow-up actions (from <NEXT_ACTIONS> tags).
+                // Rendered as accent-colored pill buttons in a horizontal row above the input zone.
                 let suggestedActions = session.latestResponseCard?.suggestedActions ?? []
                 if !sessionIsRunning && !suggestedActions.isEmpty {
-                    Rectangle()
-                        .fill(Color.white.opacity(0.06))
-                        .frame(height: 1)
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text("RECOMMENDED")
                             .font(.system(size: 9, weight: .heavy))
-                            .foregroundColor(Color.white.opacity(0.30))
+                            .foregroundColor(Color(hex: "#555D58"))
                             .kerning(0.5)
-                        ForEach(suggestedActions.prefix(2), id: \.self) { actionText in
-                            Button(action: { onRunSuggestedAction(actionText) }) {
-                                Text(actionText)
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
+                        HStack(spacing: 6) {
+                            ForEach(suggestedActions.prefix(2), id: \.self) { actionText in
+                                Button(action: { onRunSuggestedAction(actionText) }) {
+                                    Text(actionText)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                }
+                                .buttonStyle(.plain)
+                                .background(session.glowColor)
+                                .clipShape(Capsule())
+                            }
+                            Spacer()
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "#1A1C1A"))
+                    .overlay(
+                        Rectangle().fill(Color(hex: "#2E322E")).frame(height: 1),
+                        alignment: .top
+                    )
+                }
+
+                // Input zone: section label + text field row (text + mic + send/cancel).
+                // Matches the JSX InputZone component layout.
+                VStack(alignment: .leading, spacing: 7) {
+                    // Compute input-empty state once at the VStack level so it can be
+                    // referenced by both the send button appearance and its .disabled modifier
+                    // without needing a let inside the @ViewBuilder if/else branch.
+                    let inputIsEmpty = followUpInputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+                    // Section label — "REDIRECT AGENT" while running, "FOLLOW UP" at rest.
+                    Text(sessionIsRunning ? "Redirect agent" : "Follow up")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Color(hex: "#555D58"))
+                        .textCase(.uppercase)
+                        .kerning(0.6)
+
+                    // Input row: text field + mic button + send or cancel button.
+                    HStack(spacing: 6) {
+                        TextField(
+                            sessionIsRunning ? "Assign new task (stops current)..." : "Ask a follow-up...",
+                            text: $followUpInputText
+                        )
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(hex: "#ECEEED").opacity(sessionIsRunning ? 0.40 : 0.85))
+                        .disabled(sessionIsRunning)
+                        .onSubmit { submitFollowUp() }
+
+                        // Mic / voice toggle button — red when listening, muted at rest.
+                        Button(action: onVoiceToggle) {
+                            Image(systemName: physicsState.isVoiceRecording ? "mic.fill" : "mic")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(
+                                    physicsState.isVoiceRecording
+                                        ? Color(hex: "#FF6369")
+                                        : Color(hex: "#9BA39D")
+                                )
+                                .frame(width: 22, height: 22)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(
+                                            physicsState.isVoiceRecording
+                                                ? Color(hex: "#FF6369").opacity(0.15)
+                                                : Color(hex: "#282B28")
+                                        )
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(
+                                            physicsState.isVoiceRecording
+                                                ? Color(hex: "#FF6369").opacity(0.35)
+                                                : Color(hex: "#2E322E"),
+                                            lineWidth: 1
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+
+                        // Cancel button (running) or send button (idle/done).
+                        if sessionIsRunning {
+                            Button(action: handleCancelTap) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(cancelTapCount > 0 ? .white : Color(hex: "#9BA39D"))
+                                    .frame(width: 22, height: 22)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(cancelTapCount > 0 ? Color.red.opacity(0.65) : Color(hex: "#282B28"))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(
+                                                cancelTapCount > 0
+                                                    ? Color.red.opacity(0.50)
+                                                    : Color(hex: "#2E322E"),
+                                                lineWidth: 1
+                                            )
+                                    )
                             }
                             .buttonStyle(.plain)
-                            .background(session.glowColor.opacity(0.28))
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .stroke(session.glowColor.opacity(0.65), lineWidth: 1)
-                            )
-                        }
-                    }
-                }
-
-                // Follow-up text input
-                HStack(spacing: 6) {
-                    TextField(
-                        sessionIsRunning ? "Tap twice to cancel..." : "Ask a follow-up...",
-                        text: $followUpInputText
-                    )
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 10))
-                    .foregroundColor(Color.white.opacity(sessionIsRunning ? 0.40 : 0.80))
-                    .disabled(sessionIsRunning)
-                    .onSubmit { submitFollowUp() }
-
-                    if sessionIsRunning {
-                        Button(action: handleCancelTap) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(cancelTapCount > 0 ? .white : Color.white.opacity(0.55))
-                                .frame(width: 20, height: 20)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(cancelTapCount > 0
-                                              ? Color.red.opacity(0.65)
-                                              : Color.white.opacity(0.08))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button(action: submitFollowUp) {
-                            Text("↑")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 20, height: 20)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(session.glowColor.opacity(
-                                            followUpInputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                                ? 0.25 : 0.70
-                                        ))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(followUpInputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
-                )
-
-                // Voice button — compact, right-aligned
-                HStack {
-                    Spacer()
-                    Button(action: onVoiceToggle) {
-                        HStack(spacing: 5) {
-                            Image(systemName: physicsState.isVoiceRecording ? "mic.fill" : "mic")
-                                .font(.system(size: 10, weight: .bold))
-                            if physicsState.isVoiceRecording {
-                                Text("Listening...")
-                                    .font(.system(size: 10, weight: .semibold))
+                        } else {
+                            Button(action: submitFollowUp) {
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(inputIsEmpty ? Color(hex: "#555D58") : .white)
+                                    .frame(width: 22, height: 22)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(inputIsEmpty ? Color(hex: "#282B28") : session.glowColor)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(
+                                                inputIsEmpty ? Color(hex: "#2E322E") : session.glowColor,
+                                                lineWidth: 1
+                                            )
+                                    )
                             }
+                            .buttonStyle(.plain)
+                            .disabled(inputIsEmpty)
                         }
-                        .foregroundColor(physicsState.isVoiceRecording ? .white : Color.white.opacity(0.50))
-                        .padding(.horizontal, physicsState.isVoiceRecording ? 10 : 7)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(physicsState.isVoiceRecording
-                                      ? Color.red.opacity(0.35)
-                                      : Color.white.opacity(0.05))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(physicsState.isVoiceRecording
-                                        ? Color.red.opacity(0.55)
-                                        : Color.white.opacity(0.07), lineWidth: 1)
-                        )
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color(hex: "#212421"))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(Color(hex: "#2E322E"), lineWidth: 1)
+                    )
                 }
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 11)
+                .background(Color(hex: "#1A1C1A"))
+                .overlay(
+                    Rectangle().fill(Color(hex: "#2E322E")).frame(height: 1),
+                    alignment: .top
+                )
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-            .padding(.bottom, 12)
             // Measure this controls region's natural height including padding.
             // Fires whenever actions appear/disappear (e.g. response card with NEXT_ACTIONS).
             .background(
@@ -2190,7 +2305,7 @@ private struct MorphingAgentBubbleView: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.04))
+                    .background(Color(hex: "#1A1C1A"))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
 
@@ -2198,27 +2313,27 @@ private struct MorphingAgentBubbleView: View {
             if !sessionIsRunning, let outputText = session.latestActivitySummary {
                 Text(outputText)
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color.white.opacity(0.70))
+                    .foregroundColor(Color(hex: "#9BA39D"))
                     .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.03))
+                    .background(Color(hex: "#1A1C1A"))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                            .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                     )
             } else if sessionIsRunning {
                 // Placeholder output area while the command is running
                 Text("...")
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color.white.opacity(0.20))
+                    .foregroundColor(Color(hex: "#555D58"))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.03))
+                    .background(Color(hex: "#1A1C1A"))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
         }
@@ -2234,7 +2349,7 @@ private struct MorphingAgentBubbleView: View {
             HStack {
                 Text("PROGRESS")
                     .font(.system(size: 9, weight: .heavy))
-                    .foregroundColor(Color.white.opacity(0.30))
+                    .foregroundColor(Color(hex: "#555D58"))
                     .kerning(0.5)
 
                 Spacer()
@@ -2243,7 +2358,7 @@ private struct MorphingAgentBubbleView: View {
                 let totalStepCount = session.taskSteps.count
                 Text("\(completedStepCount) of \(totalStepCount)")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.28))
+                    .foregroundColor(Color(hex: "#555D58"))
             }
 
             // Thin progress bar: fraction of completed steps out of total
@@ -2258,8 +2373,9 @@ private struct MorphingAgentBubbleView: View {
                         .frame(height: 3)
 
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(session.glowColor.opacity(0.80))
+                        .fill(session.glowColor)
                         .frame(width: geometry.size.width * completedFraction, height: 3)
+                        .shadow(color: session.glowColor.opacity(0.60), radius: 4)
                         .animation(.easeInOut(duration: 0.4), value: completedFraction)
                 }
             }
@@ -2274,11 +2390,11 @@ private struct MorphingAgentBubbleView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
-        .background(Color.white.opacity(0.03))
+        .background(Color(hex: "#1A1C1A"))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                .stroke(Color(hex: "#2E322E"), lineWidth: 1)
         )
         .onAppear {
             // Start the continuous spinner rotation for in-progress step icons.
@@ -2301,10 +2417,10 @@ private struct MorphingAgentBubbleView: View {
                         .foregroundColor(session.glowColor)
                 case .completed:
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(Color(red: 0.30, green: 0.78, blue: 0.45))
+                        .foregroundColor(Color(hex: "#34D399"))
                 case .failed:
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(Color(red: 1.0, green: 0.35, blue: 0.35))
+                        .foregroundColor(Color(hex: "#E5484D"))
                 }
             }
             .font(.system(size: 10, weight: .medium))
@@ -2313,8 +2429,8 @@ private struct MorphingAgentBubbleView: View {
             Text(step.label)
                 .font(.system(size: 10))
                 .foregroundColor(step.state == .inProgress
-                                 ? Color.white.opacity(0.80)
-                                 : Color.white.opacity(0.42))
+                                 ? Color(hex: "#9BA39D")
+                                 : Color(hex: "#555D58"))
                 .lineLimit(1)
         }
     }
@@ -2351,33 +2467,34 @@ private struct MorphingAgentBubbleView: View {
 
     // MARK: Status helpers
 
-    private var statusAccentColor: Color {
+    /// Returns the (label, color) pair for the status badge pill in the card header.
+    /// Maps agent session state to the JSX design system status labels and colors.
+    private var statusBadgeInfo: (String, Color) {
         switch session.status {
-        case .stopped:            return Color.gray.opacity(0.50)
-        case .ready:              return Color(red: 0.35, green: 0.78, blue: 0.45)
-        case .starting, .running: return Color(red: 1.0, green: 0.62, blue: 0.22)
-        case .failed:             return Color(red: 1.0, green: 0.30, blue: 0.30)
+        case .running, .starting:
+            return ("Working", Color(hex: "#60A5FA"))
+        case .ready where session.latestResponseCard != nil:
+            return ("Done", Color(hex: "#34D399"))
+        case .ready:
+            return ("Idle", Color(hex: "#34D399"))
+        case .failed:
+            return ("Failed", Color(hex: "#E5484D"))
+        case .stopped:
+            return ("Stopped", Color(hex: "#555D58"))
         }
     }
 
-    private var statusChipColor: Color {
-        switch session.status {
-        case .running, .starting: return Color.orange
-        case .ready:              return Color.green
-        case .failed:             return Color.red
-        case .stopped:            return Color.white.opacity(0.40)
-        }
-    }
-
-    private var statusChipView: some View {
-        Text(session.status.displayLabel)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundColor(statusChipColor)
-            .textCase(.uppercase)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(statusChipColor.opacity(0.12)))
-            .overlay(Capsule().stroke(statusChipColor.opacity(0.22), lineWidth: 1))
+    /// Pill-shaped status badge rendered in the card header.
+    /// Uses accent-tinted background + matching border per the JSX design.
+    private var statusBadgeView: some View {
+        let (badgeLabel, badgeColor) = statusBadgeInfo
+        return Text(badgeLabel)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(badgeColor)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(badgeColor.opacity(0.15)))
+            .overlay(Capsule().stroke(badgeColor.opacity(0.25), lineWidth: 1))
             .clipShape(Capsule())
     }
 }
@@ -2408,11 +2525,28 @@ private struct AgentBubbleRootView: View {
     /// subsequent drags or gestures on the now-expanded card.
     let onBringToFront: () -> Void
 
-    /// Animated local copy of physicsState.isOrbHovered.
-    /// All morph animations share this single spring context.
-    @State private var isExpanded = false
+    /// Expansion progress: 0.0 = fully collapsed orb, 1.0 = fully expanded card.
+    /// Animated by `onChange(of: physicsState.isOrbHovered)` using a style-specific
+    /// spring curve. Because this is a CGFloat, SwiftUI interpolates it at every
+    /// animation frame, driving the true shape morph in MorphingAgentBubbleView.
+    @State private var expansionProgress: CGFloat = 0
+    /// Boolean convenience derived from expansionProgress — used by views and modifiers
+    /// that need a stable binary collapsed/expanded check (offset, animation guard).
+    private var isExpanded: Bool { expansionProgress > 0.5 }
+    /// Smoothed version of physicsState.measuredExpandedCardHeight for the outer wrapper.
+    /// physicsState.measuredExpandedCardHeight is set via DispatchQueue.main.async (no
+    /// animation), so direct use causes the wrapper to jump abruptly mid-morph and after
+    /// the morph settles. This @State tracks the same value but transitions via a spring,
+    /// keeping the wrapper height in sync with MorphingAgentBubbleView's animated interior.
+    @State private var smoothedWrapperExpandedHeight: CGFloat = kCardExpandedHeightCompact
+
+    /// Bubble appearance settings (ink drop style, morph speed, bubble size, etc.)
+    @ObservedObject private var bubbleSettingsManager = AgentBubbleSettingsManager.shared
 
     var body: some View {
+        // All bubble styles use the user-configured bubbleSize for the collapsed orb diameter.
+        let effectiveOrbSize: CGFloat = CGFloat(bubbleSettingsManager.settings.bubbleSize)
+
         // topTrailing: the orb/card is pinned to the TOP-RIGHT of the panel.
         // The card expands DOWNWARD from the orb, keeping the header on-screen
         // even when the orb is positioned near the menu bar.
@@ -2426,36 +2560,42 @@ private struct AgentBubbleRootView: View {
             // has no visible effect — they overlap exactly.
             ZStack {
                 // ── Transparent morphing wrapper ─────────────────────────────────
-                // Purely structural: a clean circular boundary around the orb when
-                // collapsed, morphing to trace the card outline when expanded.
-                // No fill, no visible stroke — invisible but defines the bubble's
-                // spatial footprint and ensures the orb sits centered in a circle.
-                let wrapperCollapsedSize: CGFloat = kOrbCollapsedSize + kOrbWrapperPadding * 2
-                RoundedRectangle(
-                    cornerRadius: isExpanded ? 20 : wrapperCollapsedSize / 2,
-                    style: .continuous
+                // Purely structural: defines the bubble's spatial footprint and
+                // ensures all child views clip to the correct shape boundary.
+                // Interpolated by expansionProgress so the wrapper tracks the
+                // true morph from circle to rounded rect at every animation frame.
+                let wrapperCollapsedSize: CGFloat = effectiveOrbSize + kOrbWrapperPadding * 2
+                let wrapperExpandedWidth = max(physicsState.measuredExpandedCardWidth, kCardExpandedWidthMin)
+                // Use smoothedWrapperExpandedHeight (spring-animated) rather than
+                // physicsState.measuredExpandedCardHeight (unaniamted async update) so the
+                // wrapper grows smoothly instead of jumping during and after the morph.
+                let wrapperExpandedHeight = max(smoothedWrapperExpandedHeight, kCardExpandedHeightCompact)
+                let wrapperCurrentWidth = wrapperCollapsedSize + (wrapperExpandedWidth - wrapperCollapsedSize) * expansionProgress
+                // Clamp to wrapperExpandedHeight so spring overshoot (expansionProgress > 1
+                // on bouncy styles like InkDrop) never stretches the wrapper taller than
+                // its measured target — the main cause of the "jumps really high" artifact.
+                let wrapperCurrentHeight = min(
+                    wrapperCollapsedSize + (wrapperExpandedHeight - wrapperCollapsedSize) * expansionProgress,
+                    wrapperExpandedHeight
                 )
-                .fill(Color.clear)
-                .frame(
-                    width: isExpanded
-                        ? max(physicsState.measuredExpandedCardWidth, kCardExpandedWidthMin)
-                        : wrapperCollapsedSize,
-                    height: isExpanded
-                        ? max(physicsState.measuredExpandedCardHeight, kCardExpandedHeightCompact)
-                        : wrapperCollapsedSize
-                )
-                .allowsHitTesting(false)
+                let wrapperCornerRadius = wrapperCollapsedSize / 2 + (20 - wrapperCollapsedSize / 2) * expansionProgress
+                RoundedRectangle(cornerRadius: wrapperCornerRadius, style: .continuous)
+                    .fill(Color.clear)
+                    .frame(width: wrapperCurrentWidth, height: wrapperCurrentHeight)
+                    .allowsHitTesting(false)
 
-                // ── Morphing bubble + status dot ─────────────────────────────────
-                // topTrailing alignment anchors the status dot to the orb's corner
-                // and ensures the card expands downward from the orb position.
-                // The center-aligned outer ZStack centers this when the orb is
-                // smaller than the wrapper (collapsed state).
+                // ── Unified morphing bubble — always present, never conditionally
+                // inserted or removed. expansionProgress (0→1) drives the true shape
+                // morph inside MorphingAgentBubbleView: frame size, corner radius,
+                // card background/content opacity, and the per-style effect.
+                // AgentOrbView lives here (not inside MorphingAgentBubbleView) so its
+                // OrbStatusDot badge — which extends 3pt outside the orb frame — is
+                // never clipped by MorphingAgentBubbleView's clipShape.
                 ZStack(alignment: .topTrailing) {
                     MorphingAgentBubbleView(
                         session: session,
                         physicsState: physicsState,
-                        isExpanded: isExpanded,
+                        expansionProgress: expansionProgress,
                         onDragStarted: onDragStarted,
                         onDragUpdated: onDragUpdated,
                         onDragEnded: onDragEnded,
@@ -2465,11 +2605,22 @@ private struct AgentBubbleRootView: View {
                         onVoiceToggle: onVoiceToggle
                     )
 
-                    // Status dot is inset from the top-right corner so it sits visibly
-                    // inside the orb circle rather than hanging outside the boundary.
-                    OrbAccentStatusDot(status: session.status, isHovered: isExpanded)
-                        .offset(x: -kOrbStatusDotInset, y: kOrbStatusDotInset)
+                    // Orb rendered outside MorphingAgentBubbleView's clipShape so the
+                    // internal OrbStatusDot badge renders without clipping.
+                    // Fades out as the card expands — at expansionProgress = 1 the orb
+                    // is invisible and only the card content remains visible.
+                    AgentOrbView(session: session)
+                        .frame(width: effectiveOrbSize, height: effectiveOrbSize)
+                        .opacity(Double(1 - expansionProgress))
+                        .allowsHitTesting(false)
                 }
+                // compositingGroup() flattens MorphingAgentBubbleView + AgentOrbView into
+                // a single bitmap so the drop shadow is computed from the correct alpha
+                // channel — the orb shape at collapsed state, the card shape at expanded.
+                // Without this, the shadow comes from the rectangular bounding box rather
+                // than the actual circular or rounded-rect shape the user sees.
+                .compositingGroup()
+                .shadow(color: Color.black.opacity(0.45), radius: 8, y: 3)
             }
             // Physics offset: applied to the entire unit (wrapper + orb + dot) so all
             // visual elements move together. Zero out when expanded so the card stays
@@ -2493,23 +2644,50 @@ private struct AgentBubbleRootView: View {
             )
             .padding(.trailing, kOrbTrailingPadding)
             .padding(.top, kOrbTopPadding)
-            // Tap-to-expand: only fire when collapsed so the card can still receive
-            // its own interactions (text fields, buttons) when expanded.
-            // simultaneousGesture lets this fire even while DragGesture is pending.
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    guard !isExpanded else { return }
-                    onBringToFront()   // bring this panel above any overlapping transparent panels
-                    physicsState.isOrbHovered = true
-                }
-            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Spring drives the morph — response/damping approximate CSS cubic-bezier(0.34,1.56,0.64,1)
+        // Style-specific spring drives the shape morph (expansionProgress 0→1).
         .onChange(of: physicsState.isOrbHovered) { nowExpanded in
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
-                isExpanded = nowExpanded
+            withAnimation(styleSpecificExpandAnimation(for: bubbleSettingsManager.settings.style)) {
+                expansionProgress = nowExpanded ? 1.0 : 0.0
+            }
+        }
+        // Smoothly follow physicsState.measuredExpandedCardHeight changes so the outer
+        // wrapper height never jumps abruptly mid-morph or after the morph settles.
+        .onChange(of: physicsState.measuredExpandedCardHeight) { newHeight in
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
+                smoothedWrapperExpandedHeight = newHeight
             }
         }
     }
+
+    // MARK: - Style-specific animation helpers
+
+    /// Returns a spring animation whose character matches the selected bubble style's personality.
+    /// Aurora feels dreamy and weightless; crystal snaps precisely; inkDrop bounces organically;
+    /// spectrum pulses with energy; orbital glides smoothly; prismCard slides with authority.
+    private func styleSpecificExpandAnimation(for style: BubbleStyle) -> Animation {
+        switch style {
+        case .aurora:
+            // Slow, dreamy spring — aurora feels soft and weightless, like mist settling
+            return .spring(response: 0.65, dampingFraction: 0.80)
+        case .crystal:
+            // Tight, snappy spring — crystal is precise and geometric, zero overshoot
+            return .spring(response: 0.38, dampingFraction: 0.90)
+        case .inkDrop:
+            // Bouncy spring — ink drop has organic, fluid energy with natural overshoot
+            return .spring(response: 0.55, dampingFraction: 0.62)
+        case .spectrum:
+            // Punchy but controlled — energetic response time with enough damping to
+            // prevent the card from overshooting its bounds during expand/collapse.
+            return .spring(response: 0.42, dampingFraction: 0.74)
+        case .orbital:
+            // Smooth and deliberate — like a satellite settling into a stable orbit
+            return .spring(response: 0.58, dampingFraction: 0.84)
+        case .prismCard:
+            // Smooth, confident slide — card-like authority with minimal overshoot
+            return .spring(response: 0.45, dampingFraction: 0.92)
+        }
+    }
+
 }

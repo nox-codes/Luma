@@ -242,7 +242,10 @@ final class LumaFlowEngine {
                 consecutiveReplanFailureCount += 1
                 LumaLogger.log("[LumaFlow] Replan failed for '\(context.roughPlan[stepIndex].label)' (failure \(consecutiveReplanFailureCount))")
                 if consecutiveReplanFailureCount >= maximumConsecutiveReplanFailures {
-                    return .failed("Replan API failed \(maximumConsecutiveReplanFailures) consecutive times for '\(context.roughPlan[stepIndex].label)'")
+                    // Notify the user via voice before giving up so they know what blocked
+                    let blockedStepLabel = context.roughPlan[stepIndex].label
+                    NativeTTSClient.shared.speak("I'm having trouble with \(blockedStepLabel) — the AI isn't responding. Moving on.")
+                    return .failed("Replan API failed \(maximumConsecutiveReplanFailures) consecutive times for '\(blockedStepLabel)'")
                 }
                 context.lastObservation = "Replan API timed out — retrying"
                 continue
@@ -291,7 +294,10 @@ final class LumaFlowEngine {
                 context.lastObservation = "Action error: \(error.localizedDescription)"
                 LumaLogger.log("[LumaFlow] Micro-action error: \(error.localizedDescription)")
                 if consecutiveReplanFailureCount >= maximumConsecutiveReplanFailures {
-                    return .failed("Step '\(context.roughPlan[stepIndex].label)' failed: \(error.localizedDescription)")
+                    // Notify the user via voice so they know what blocked the agent
+                    let blockedStepLabel = context.roughPlan[stepIndex].label
+                    NativeTTSClient.shared.speak("I couldn't complete \(blockedStepLabel). Moving to the next step.")
+                    return .failed("Step '\(blockedStepLabel)' failed: \(error.localizedDescription)")
                 }
             }
         }

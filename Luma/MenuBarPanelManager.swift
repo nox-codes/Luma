@@ -219,6 +219,11 @@ final class MenuBarPanelManager: NSObject {
             createPanel()
         }
 
+        // Re-check permissions each time the panel opens. The polling timer stops
+        // once all permissions are confirmed, so this is the recovery path if the
+        // user revokes a permission in System Settings while Luma is running.
+        companionManager.refreshAllPermissions()
+
         positionPanelBelowStatusItem()
 
         guard let panel else { return }

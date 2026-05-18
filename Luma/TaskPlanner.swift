@@ -97,7 +97,8 @@ final class TaskPlanner {
         // has a separate response-extraction code path that can fail for thinking models
         // (e.g. Gemini 2.5 Flash returning array content blocks instead of a plain string).
         // Streaming accumulates the full text and returns it at completion.
-        // Step planning is text-only — no images needed.
+        // Pass empty images — APIClient will auto-inject a screenshot of the primary display
+        // so the AI has context about the current frontmost app when generating the plan.
         let (responseText, _) = try await APIClient.shared.analyzeImageStreaming(
             images: [],
             systemPrompt: stepGenerationSystemPrompt,

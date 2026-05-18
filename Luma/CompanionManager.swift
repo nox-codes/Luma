@@ -22,13 +22,22 @@ enum CompanionVoiceState {
 }
 
 /// Tracks whether the classifier is currently idle or executing a task.
-/// Used to route mid-task voice messages to the active context instead
-/// of re-running the full classification pipeline.
+/// Used to forward agent follow-ups to the active session rather than
+/// re-running the full classification pipeline.
 enum LumaSystemState: Equatable {
     case idle
-    /// Currently executing the given path. New voice messages are forwarded
-    /// as follow-up context to that path rather than triggering a new classify.
+    /// Currently executing the given path.
     case executing(path: LumaExecutionPath)
+}
+
+/// A completed or interrupted user request kept as read-only background context
+/// for future AI prompts. Injected as "Previously..." entries in the system prompt
+/// so the AI treats prior tasks as done — never as active to-dos.
+struct LumaCompletedTask {
+    /// What the user originally asked for.
+    let userRequest: String
+    /// The AI's spoken response, or nil if the task was interrupted before a response was delivered.
+    let outcome: String?
 }
 
 @MainActor
@@ -89,9 +98,15 @@ final class CompanionManager: ObservableObject {
     /// Native macOS TTS — fully local, no external API calls.
     private let nativeTTSClient = NativeTTSClient()
 
-    /// Conversation history so Claude remembers prior exchanges within a session.
-    /// Each entry is the user's transcript and Claude's response.
-    private var conversationHistory: [(userTranscript: String, assistantResponse: String)] = []
+    /// The user request currently being processed by the AI pipeline.
+    /// Replaced each time a new request arrives — only one request is ever active.
+    /// Archived to taskHistory (as interrupted) when a new request preempts it.
+    private var activeTaskRequest: String?
+
+    /// Completed and interrupted requests kept as read-only context for AI prompts.
+    /// Injected into the system prompt as "Previously..." entries so the AI treats them
+    /// as background context rather than active to-dos. Bounded to 10 entries.
+    private var taskHistory: [LumaCompletedTask] = []
 
     /// The currently running AI response task, if any. Cancelled when the user
     /// speaks again so a new response can begin immediately.
@@ -287,6 +302,9 @@ final class CompanionManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            #if DEBUG
+            EnergyDebugLogger.notifFired("pointAt")
+            #endif
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard let nsValue = notification.userInfo?[CursorGuide.targetPointUserInfoKey] as? NSValue else { return }
@@ -311,6 +329,9 @@ final class CompanionManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            #if DEBUG
+            EnergyDebugLogger.notifFired("screenshotShortcut")
+            #endif
             Task { @MainActor [weak self] in
                 guard let self, self.isOverlayVisible else { return }
 
@@ -339,7 +360,14 @@ final class CompanionManager: ObservableObject {
                 ensureDefaultAgentSession()
             }
         }
-        AgentHotkeyHandler.shared.startMonitoring(companionManager: self)
+        // Only register hotkeys when at least one agent session exists.
+        // With zero sessions the switch/cycle/spawn-nth hotkeys are meaningless
+        // and two global NSEvent monitors (local + global keyDown) fire on every
+        // keystroke system-wide. They are re-registered in createAndSelectNewAgentSession
+        // the moment the first session is created.
+        if !agentSessions.isEmpty {
+            AgentHotkeyHandler.shared.startMonitoring(companionManager: self)
+        }
 
         // Listen for agent task completion to speak results and update overlay
         agentTaskCompletedObserver = NotificationCenter.default.addObserver(
@@ -347,6 +375,9 @@ final class CompanionManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            #if DEBUG
+            EnergyDebugLogger.notifFired("agentTaskCompleted")
+            #endif
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // "title" is only used for logging; the summary is already clean (tags
@@ -558,6 +589,9 @@ final class CompanionManager: ObservableObject {
         let previouslyHadMicrophone = hasMicrophonePermission
         let previouslyHadAll = allPermissionsGranted
 
+        #if DEBUG
+        EnergyDebugLogger.refreshSubcall("AXIsProcessTrusted")
+        #endif
         let currentlyHasAccessibility = WindowPositionManager.hasAccessibilityPermission()
         hasAccessibilityPermission = currentlyHasAccessibility
 
@@ -567,8 +601,14 @@ final class CompanionManager: ObservableObject {
             globalPushToTalkShortcutMonitor.stop()
         }
 
+        #if DEBUG
+        EnergyDebugLogger.refreshSubcall("CGPreflightScreenCaptureAccess")
+        #endif
         hasScreenRecordingPermission = WindowPositionManager.hasScreenRecordingPermission()
 
+        #if DEBUG
+        EnergyDebugLogger.refreshSubcall("AVCaptureDevice.authorizationStatus")
+        #endif
         let micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         hasMicrophonePermission = micAuthStatus == .authorized
 
@@ -606,6 +646,19 @@ final class CompanionManager: ObservableObject {
                 overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                 isOverlayVisible = true
             }
+        }
+
+        // Once every permission is confirmed and onboarding is done, the 1.5 Hz
+        // permission-polling timer has nothing left to discover. System permission
+        // states (accessibility, screen recording, microphone) only change when
+        // the user explicitly acts in System Settings, and the app must be
+        // restarted or re-focused for macOS to surface the change anyway.
+        // Stopping here eliminates the constant AXIsProcessTrusted /
+        // CGPreflightScreenCaptureAccess syscalls that are the primary source
+        // of Luma's idle energy impact.
+        if allPermissionsGranted && hasCompletedOnboarding {
+            accessibilityCheckTimer?.invalidate()
+            accessibilityCheckTimer = nil
         }
     }
 
@@ -672,6 +725,9 @@ final class CompanionManager: ObservableObject {
     /// macOS requires an app restart for that one to take effect.
     private func startPermissionPolling() {
         accessibilityCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            #if DEBUG
+            EnergyDebugLogger.timerFired("permissionPoll@1.5s")
+            #endif
             Task { @MainActor [weak self] in
                 self?.refreshAllPermissions()
             }
@@ -917,26 +973,20 @@ final class CompanionManager: ObservableObject {
     /// handles clarification and confirmation loops, then dispatches to
     /// the appropriate engine (CLI, agent, walkthrough, or Claude response).
     private func classifyAndRouteInput(_ transcript: String) async {
-        // SYSTEM STATE GUARD — if a task is already running, route as a follow-up
-        // to the active execution context rather than re-running the full classifier.
-        // This prevents mid-task voice messages from spawning a second execution.
+        // SYSTEM STATE GUARD — if a visual agent session is actively running, forward
+        // the new voice input to it as a follow-up prompt so the agent has full context.
+        // For all other paths (CLI, guide, response), a new request always replaces the
+        // current task: fall through to the classifier and let sendTranscriptToClaudeWithScreenshot
+        // cancel and archive the previous task before starting the new one.
         if case .executing(let activePath) = systemExecutionState {
-            LumaLogger.log("[LumaClassifier] System is executing — routing follow-up to active path: \(activePath)")
-            switch activePath {
-            case .visualAgent:
-                // Forward to the active agent session as a follow-up prompt
-                if let activeSession = agentSessions.first(where: { $0.status == .running || $0.status == .starting }) {
-                    await activeSession.submitPrompt(transcript)
-                } else {
-                    // No running session — fall through to normal routing
-                    break
-                }
-                return
-            case .cli, .guide, .response:
-                // For CLI / guide / response paths, the follow-up becomes a new response request
-                sendTranscriptToClaudeWithScreenshot(transcript: transcript)
+            if case .visualAgent = activePath,
+               let activeSession = agentSessions.first(where: { $0.status == .running || $0.status == .starting }) {
+                LumaLogger.log("[LumaClassifier] Visual agent running — forwarding follow-up to active session")
+                await activeSession.submitPrompt(transcript)
                 return
             }
+            // CLI / guide / response: fall through so the new request replaces the current task.
+            LumaLogger.log("[LumaClassifier] New request received — re-classifying to replace current task")
         }
 
         // If we were waiting for a clarification answer, combine it with the
@@ -1113,6 +1163,39 @@ final class CompanionManager: ObservableObject {
         }
     }
 
+    // MARK: - Task History Management
+
+    /// Moves activeTaskRequest to taskHistory with the given outcome, then clears it.
+    /// Pass nil as outcome when the task is interrupted (cancelled before a response was delivered),
+    /// or the AI's spoken response when the task completes successfully.
+    /// Noop if no task is currently active.
+    private func archiveActiveTask(outcome: String?) {
+        guard let request = activeTaskRequest else { return }
+        activeTaskRequest = nil
+        taskHistory.append(LumaCompletedTask(userRequest: request, outcome: outcome))
+        // Cap at 10 entries to prevent unbounded context growth
+        if taskHistory.count > 10 {
+            taskHistory.removeFirst(taskHistory.count - 10)
+        }
+        LumaLogger.log("[Luma] Task archived — history now has \(taskHistory.count) entries")
+    }
+
+    /// Builds the "Previously, the user asked to..." context block that is injected into
+    /// the system prompt before every AI request. Returns an empty string when there is
+    /// no history yet (first request in a session). Each entry explicitly labels prior tasks
+    /// as completed or interrupted so the AI never treats them as active to-dos.
+    private func buildTaskHistoryContext() -> String {
+        guard !taskHistory.isEmpty else { return "" }
+        let historyLines = taskHistory.map { task -> String in
+            if let outcome = task.outcome {
+                return "Previously, the user asked to: \"\(task.userRequest)\". Result: \"\(outcome)\""
+            } else {
+                return "Previously, the user asked to: \"\(task.userRequest)\". Result: interrupted before completion."
+            }
+        }.joined(separator: "\n")
+        return "Recent conversation context (treat as background context only — not active to-dos):\n" + historyLines
+    }
+
     // MARK: - AI Response Pipeline
 
     /// Captures a screenshot, sends it along with the transcript to the AI,
@@ -1121,6 +1204,13 @@ final class CompanionManager: ObservableObject {
     /// The response may include a [POINT:x,y:label] tag which triggers
     /// the buddy to fly to that element on screen.
     private func sendTranscriptToClaudeWithScreenshot(transcript: String) {
+        // Archive the previous task as interrupted — it did not complete before this new request.
+        // This moves it to taskHistory where it becomes read-only "Previously..." context.
+        archiveActiveTask(outcome: nil)
+
+        // Mark this request as the single active task. Only one task is ever active at a time.
+        activeTaskRequest = transcript
+
         // If a walkthrough is currently running, cancel it before handling the new request.
         // This prevents the old walkthrough's timers, AX observers, and polling from
         // interfering with the new request — and resets isTypingStepActive to false.
@@ -1200,22 +1290,39 @@ final class CompanionManager: ObservableObject {
 
                 guard !Task.isCancelled else { return }
 
-                // Pass conversation history so Claude remembers prior exchanges
-                let historyForAPI = conversationHistory.map { entry in
-                    (userPlaceholder: entry.userTranscript, assistantResponse: entry.assistantResponse)
-                }
+                // Build the system prompt: memory + outlook prefix → base persona → task history.
+                // The full context prefix (memory.md + behavioral outlook) is prepended so the AI
+                // always has a complete picture of the user before choosing how to respond.
+                // History is injected into the system prompt rather than sent as conversation
+                // message turns — this ensures the AI sees previous tasks as completed background
+                // context only, and never as active instructions to execute simultaneously.
+                let baseSystemPrompt = isMultiStepRequest
+                    ? Self.multiStepPlanningSystemPrompt
+                    : Self.companionVoiceResponseSystemPrompt
+                let taskHistoryContext = buildTaskHistoryContext()
+                let baseWithHistory = taskHistoryContext.isEmpty
+                    ? baseSystemPrompt
+                    : baseSystemPrompt + "\n\n" + taskHistoryContext
+                let fullContextPrefix = AgentMemoryIntegration.fullSystemContextPrefix()
+                let systemPromptWithHistory = fullContextPrefix.map { $0 + "\n\n" + baseWithHistory }
+                    ?? baseWithHistory
 
                 let (fullResponseText, _) = try await apiClient.analyzeImageStreaming(
                     images: labeledImages,
-                    systemPrompt: isMultiStepRequest
-                        ? Self.multiStepPlanningSystemPrompt
-                        : Self.companionVoiceResponseSystemPrompt,
-                    conversationHistory: historyForAPI,
+                    systemPrompt: systemPromptWithHistory,
+                    conversationHistory: [],  // history is in systemPrompt; not sent as message turns
                     userPrompt: compressedTranscript,
                     maxOutputTokens: isMultiStepRequest ? 2048 : 1024,
                     onTextChunk: { _ in
                         // No streaming text display — spinner stays until TTS plays
                     }
+                )
+
+                // Observe this interaction asynchronously to update the user's behavioral outlook.
+                // Fire-and-forget — never blocks the voice response or TTS playback.
+                LumaUserOutlookManager.shared.observeInteractionAsync(
+                    userInput: compressedTranscript,
+                    aiResponse: fullResponseText
                 )
 
                 guard !Task.isCancelled else { return }
@@ -1332,25 +1439,17 @@ final class CompanionManager: ObservableObject {
                     }
                 }
 
-                // Save this exchange to conversation history (with the point tag
-                // stripped so it doesn't confuse future context)
-                conversationHistory.append((
-                    userTranscript: transcript,
-                    assistantResponse: spokenText
-                ))
-
-                // Keep only the last 10 exchanges to avoid unbounded context growth
-                if conversationHistory.count > 10 {
-                    conversationHistory.removeFirst(conversationHistory.count - 10)
-                }
-
-                LumaLogger.log("[Luma] Conversation history: \(conversationHistory.count) exchanges")
+                // Archive the completed task with its spoken response as the outcome.
+                // Future requests will see this as a "Previously..." entry in the system prompt.
+                archiveActiveTask(outcome: spokenText)
 
                 LumaAnalytics.trackAIResponseReceived(response: spokenText)
 
-                // Play the response via TTS. Keep the spinner (processing state)
-                // until the audio actually starts playing, then switch to responding.
-                if !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Play the response via TTS — gated by the "Auto-read responses" setting
+                // (UserDefaults key luma.voice.autoReadResponses, default true).
+                // When disabled, the response is shown visually but not spoken aloud.
+                let shouldAutoReadResponse = UserDefaults.standard.object(forKey: NativeTTSClient.autoReadResponsesKey) as? Bool ?? true
+                if shouldAutoReadResponse && !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     do {
                         try await nativeTTSClient.speakText(spokenText)
                         // speakText queues the utterance and returns immediately —
@@ -1837,8 +1936,15 @@ final class CompanionManager: ObservableObject {
         let runtime = AgentRuntimeManager.shared.createRuntime()
         session.bind(to: runtime)
 
+        let isFirstAgentSession = agentSessions.isEmpty
         agentSessions.append(session)
         activeAgentSessionID = session.id
+
+        // Start hotkey monitoring when the first session is created so the global
+        // keyDown monitors are only active when there is actually something to switch/cycle.
+        if isFirstAgentSession {
+            AgentHotkeyHandler.shared.startMonitoring(companionManager: self)
+        }
 
         // Observe this session's status changes so the dock refreshes automatically
         observeAgentSessionStatus(session)
@@ -1862,6 +1968,12 @@ final class CompanionManager: ObservableObject {
 
         if activeAgentSessionID == id {
             activeAgentSessionID = agentSessions.first?.id
+        }
+
+        // Unregister hotkeys when the last session is dismissed — no sessions means
+        // the switch/cycle/spawn-nth shortcuts have nothing to act on.
+        if agentSessions.isEmpty {
+            AgentHotkeyHandler.shared.stopMonitoring()
         }
 
         updateAgentDock()

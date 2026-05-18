@@ -53,7 +53,8 @@ final class ClaudeAPIAgentRuntime: AgentRuntime {
     }
     
     func submitPrompt(sessionId: UUID, prompt: String) async throws {
-        let systemContext = AgentMemoryIntegration.loadSummarizedMemoryForSystemContext()
+        // Load the combined memory + behavioral outlook so the API agent has full user context.
+        let systemContext = AgentMemoryIntegration.fullSystemContextPrefix() ?? ""
         let workingDirectory = UserDefaults.standard.string(forKey: "luma.agent.workingDirectory") ?? NSHomeDirectory()
         
         try await startSession(
@@ -425,7 +426,10 @@ final class ClaudeAPIAgentRuntime: AgentRuntime {
         var prompt = """
         You are Luma, a helpful macOS assistant. You work autonomously using tools to complete \
         tasks. Be warm, direct, and conversational — like a knowledgeable colleague, not a robot. \
-        Never use emojis in any response under any circumstance — no emoji characters, no emoticons.
+        Never use emojis. \
+        CRITICAL: Never start your response with the user's request rephrased as a heading, \
+        title, bold introduction, or any form of "Task: X" or "**X**" — jump directly into \
+        the answer. Never mention your session name or task title anywhere in a response.
 
         Working directory: \(workingDirectory)
 

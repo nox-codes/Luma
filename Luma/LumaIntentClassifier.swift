@@ -344,22 +344,57 @@ final class LumaIntentClassifier {
         let requestBody: [String: Any]
         let cheapModel = Self.cheapModelID(for: profile)
 
+        // Capture a screenshot so the classifier can see what's on screen.
+        // Visual context improves routing accuracy — e.g. knowing a browser is open helps
+        // distinguish "search X" (CLI) from "navigate to X" (visual_agent).
+        let classifierScreenshotData = await ScreenCapture.captureFullScreen()
+
+        // Prepend the user's memory and behavioral outlook to the classifier system prompt so
+        // routing decisions account for personal context — e.g. a developer's "run it" maps
+        // to CLI, while a non-technical user's identical phrase likely means visual_agent.
+        let enrichedClassifierSystemPrompt: String
+        if let contextPrefix = AgentMemoryIntegration.fullSystemContextPrefix() {
+            enrichedClassifierSystemPrompt = contextPrefix + "\n\n" + Self.classifierSystemPrompt
+        } else {
+            enrichedClassifierSystemPrompt = Self.classifierSystemPrompt
+        }
+
         if profile.provider == .anthropic {
             endpointURLString = "\(profile.effectiveBaseURL)/messages"
+            let userContent: Any
+            if let screenshotData = classifierScreenshotData {
+                let imageBlock: [String: Any] = [
+                    "type": "image",
+                    "source": ["type": "base64", "media_type": "image/jpeg", "data": screenshotData.base64EncodedString()]
+                ]
+                userContent = [imageBlock, ["type": "text", "text": userMessage]] as [[String: Any]]
+            } else {
+                userContent = userMessage
+            }
             requestBody = [
                 "model": cheapModel,
                 "max_tokens": 300,
-                "system": Self.classifierSystemPrompt,
-                "messages": [["role": "user", "content": userMessage]]
+                "system": enrichedClassifierSystemPrompt,
+                "messages": [["role": "user", "content": userContent]]
             ]
         } else {
             endpointURLString = "\(profile.effectiveBaseURL)/chat/completions"
+            let userContent: Any
+            if let screenshotData = classifierScreenshotData {
+                let imageBlock: [String: Any] = [
+                    "type": "image_url",
+                    "image_url": ["url": "data:image/jpeg;base64,\(screenshotData.base64EncodedString())"]
+                ]
+                userContent = [imageBlock, ["type": "text", "text": userMessage]] as [[String: Any]]
+            } else {
+                userContent = userMessage
+            }
             requestBody = [
                 "model": cheapModel,
                 "max_tokens": 300,
                 "messages": [
-                    ["role": "system", "content": Self.classifierSystemPrompt],
-                    ["role": "user", "content": userMessage]
+                    ["role": "system", "content": enrichedClassifierSystemPrompt],
+                    ["role": "user", "content": userContent]
                 ]
             ]
         }
@@ -499,20 +534,43 @@ final class LumaIntentClassifier {
         let endpointString: String
         let requestBody: [String: Any]
 
+        // Capture a screenshot so the bubble classifier has visual context.
+        let bubbleClassifierScreenshotData = await ScreenCapture.captureFullScreen()
+
         if profile.provider == .anthropic {
             endpointString = "\(profile.effectiveBaseURL)/messages"
+            let userContent: Any
+            if let screenshotData = bubbleClassifierScreenshotData {
+                let imageBlock: [String: Any] = [
+                    "type": "image",
+                    "source": ["type": "base64", "media_type": "image/jpeg", "data": screenshotData.base64EncodedString()]
+                ]
+                userContent = [imageBlock, ["type": "text", "text": prompt]] as [[String: Any]]
+            } else {
+                userContent = prompt
+            }
             requestBody = [
                 "model": cheapModel, "max_tokens": 10,
                 "system": systemPrompt,
-                "messages": [["role": "user", "content": prompt]]
+                "messages": [["role": "user", "content": userContent]]
             ]
         } else {
             endpointString = "\(profile.effectiveBaseURL)/chat/completions"
+            let userContent: Any
+            if let screenshotData = bubbleClassifierScreenshotData {
+                let imageBlock: [String: Any] = [
+                    "type": "image_url",
+                    "image_url": ["url": "data:image/jpeg;base64,\(screenshotData.base64EncodedString())"]
+                ]
+                userContent = [imageBlock, ["type": "text", "text": prompt]] as [[String: Any]]
+            } else {
+                userContent = prompt
+            }
             requestBody = [
                 "model": cheapModel, "max_tokens": 10,
                 "messages": [
                     ["role": "system", "content": systemPrompt],
-                    ["role": "user",   "content": prompt]
+                    ["role": "user",   "content": userContent]
                 ]
             ]
         }

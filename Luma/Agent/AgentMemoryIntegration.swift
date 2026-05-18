@@ -52,6 +52,25 @@ enum AgentMemoryIntegration {
         """
     }
 
+    /// Builds a combined system prompt prefix containing both the user's memory
+    /// and their behavioral outlook profile. This is the canonical method to call
+    /// before any API request — it ensures both context layers are always present.
+    /// Returns nil if neither memory nor outlook has any content.
+    static func fullSystemContextPrefix() -> String? {
+        var sections: [String] = []
+
+        if let memorySection = memorySystemPromptPrefix() {
+            sections.append(memorySection)
+        }
+
+        if let outlookSection = LumaUserOutlookManager.shared.outlookSystemPromptSection() {
+            sections.append(outlookSection)
+        }
+
+        guard !sections.isEmpty else { return nil }
+        return sections.joined(separator: "\n\n")
+    }
+
     // MARK: - History Recording
 
     /// Records a user message to the agent's conversation history.

@@ -447,13 +447,24 @@ final class APIClient {
             : String(repeating: "*", count: apiKey.count)
         LumaLogger.log("APIClient ▶ provider=\(activeProfile.provider.displayName) endpoint=\(endpointURL.absoluteString) model=\(effectiveModelID) key=\(maskedAPIKey)")
 
+        // Always attach a full-screen screenshot so the AI has visual context.
+        // If the caller already provided screenshots (e.g. CompanionManager's multi-monitor
+        // ScreenCaptureKit capture), use those. Otherwise capture the primary display now
+        // so the AI is never sent a request without a screenshot.
+        var imagesWithScreenshot = images
+        if imagesWithScreenshot.isEmpty {
+            if let fallbackScreenshotData = await ScreenCapture.captureFullScreen() {
+                imagesWithScreenshot = [(data: fallbackScreenshotData, label: "primary display")]
+            }
+        }
+
         // Build the request body in the format expected by this provider
         let requestBodyData: Data
         switch activeProfile.provider {
         case .anthropic:
             requestBodyData = try buildAnthropicRequestBody(
                 modelID: effectiveModelID,
-                images: images,
+                images: imagesWithScreenshot,
                 systemPrompt: systemPrompt,
                 conversationHistory: conversationHistory,
                 userPrompt: userPrompt,
@@ -463,7 +474,7 @@ final class APIClient {
         default:
             requestBodyData = try buildOpenAICompatibleRequestBody(
                 modelID: effectiveModelID,
-                images: images,
+                images: imagesWithScreenshot,
                 systemPrompt: systemPrompt,
                 conversationHistory: conversationHistory,
                 userPrompt: userPrompt,
@@ -474,7 +485,7 @@ final class APIClient {
 
         urlRequest.httpBody = requestBodyData
         let payloadSizeMB = Double(requestBodyData.count) / 1_048_576.0
-        LumaLogger.log("APIClient: streaming request to \(activeProfile.provider.displayName) — \(String(format: "%.1f", payloadSizeMB))MB, \(images.count) image(s), max_tokens=\(maxOutputTokens)")
+        LumaLogger.log("APIClient: streaming request to \(activeProfile.provider.displayName) — \(String(format: "%.1f", payloadSizeMB))MB, \(imagesWithScreenshot.count) image(s), max_tokens=\(maxOutputTokens)")
 
         // Use bytes streaming to read the SSE response line by line.
         // On a 429 rate-limit response, wait 60 seconds and retry exactly once.
@@ -598,13 +609,23 @@ final class APIClient {
             : String(repeating: "*", count: apiKey.count)
         LumaLogger.log("[APIClient] provider=\(activeProfile.provider.displayName) endpoint=\(endpointURL.absoluteString) model=\(effectiveModelID) key=\(maskedAPIKey)")
 
+        // Always attach a full-screen screenshot so the AI has visual context.
+        // If the caller already provided screenshots, use those. Otherwise capture
+        // the primary display now so the AI is never sent a request without a screenshot.
+        var imagesWithScreenshot = images
+        if imagesWithScreenshot.isEmpty {
+            if let fallbackScreenshotData = await ScreenCapture.captureFullScreen() {
+                imagesWithScreenshot = [(data: fallbackScreenshotData, label: "primary display")]
+            }
+        }
+
         // Build the request body in the format expected by this provider (non-streaming)
         let requestBodyData: Data
         switch activeProfile.provider {
         case .anthropic:
             requestBodyData = try buildAnthropicRequestBody(
                 modelID: effectiveModelID,
-                images: images,
+                images: imagesWithScreenshot,
                 systemPrompt: systemPrompt,
                 conversationHistory: conversationHistory,
                 userPrompt: userPrompt,
@@ -614,7 +635,7 @@ final class APIClient {
         default:
             requestBodyData = try buildOpenAICompatibleRequestBody(
                 modelID: effectiveModelID,
-                images: images,
+                images: imagesWithScreenshot,
                 systemPrompt: systemPrompt,
                 conversationHistory: conversationHistory,
                 userPrompt: userPrompt,
@@ -625,7 +646,7 @@ final class APIClient {
 
         urlRequest.httpBody = requestBodyData
         let payloadSizeMB = Double(requestBodyData.count) / 1_048_576.0
-        LumaLogger.log("[APIClient] non-streaming request to \(activeProfile.provider.displayName) — \(String(format: "%.1f", payloadSizeMB))MB, \(images.count) image(s), max_tokens=\(maxOutputTokens)")
+        LumaLogger.log("[APIClient] non-streaming request to \(activeProfile.provider.displayName) — \(String(format: "%.1f", payloadSizeMB))MB, \(imagesWithScreenshot.count) image(s), max_tokens=\(maxOutputTokens)")
 
         // On a 429 rate-limit response, wait 60 seconds and retry exactly once.
         // If the retry also fails, throw — no further retries.

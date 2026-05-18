@@ -6,6 +6,7 @@
 //  Tabs: Account, API Profiles, Model, General.
 //
 
+import AVFoundation
 import SwiftUI
 
 // MARK: - SettingsPanelView
@@ -14,6 +15,10 @@ import SwiftUI
 struct SettingsPanelView: View {
 
     @Environment(\.dismiss) private var dismiss
+
+    // Triggers re-render whenever the user changes the accent theme, so the Done
+    // button and sidebar selected states immediately reflect the new accent color.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
 
     // Observe singletons so changes in each tab update the UI immediately.
     @StateObject private var accountManager = AccountManager.shared
@@ -27,17 +32,37 @@ struct SettingsPanelView: View {
         HStack(spacing: 0) {
             settingsSidebar
 
-            Divider()
-                .background(DS.Colors.borderSubtle)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    settingsHeader
-                    selectedTabContent
+            VStack(spacing: 0) {
+                // Top bar — Done button sits tight to the right edge with DS accent styling.
+                HStack {
+                    Spacer()
+                    Button("Done") {
+                        closeSettingsPanel()
+                    }
+                    .keyboardShortcut(.return)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.textOnAccent)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(DS.Colors.accent))
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
                 }
-                .frame(maxWidth: 700, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 22)
+                .padding(.leading, 20)
+                .padding(.trailing, 12)
+                .padding(.vertical, 10)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        settingsHeader
+                        selectedTabContent
+                    }
+                    .frame(maxWidth: 700, alignment: .leading)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 22)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DS.Colors.background)
@@ -45,20 +70,6 @@ struct SettingsPanelView: View {
         .frame(minWidth: 780, minHeight: 560)
         .background(DS.Colors.background)
         .focusEffectDisabled()
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { closeSettingsPanel() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textPrimary)
-                    .focusEffectDisabled()
-                    .onHover { isHovering in
-                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
-                    .padding(.trailing, 24) //24 points for margin right
-
-            }
-        }
     }
 
     private func closeSettingsPanel() {
@@ -67,25 +78,23 @@ struct SettingsPanelView: View {
     }
 
     private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: 4) {
-//            Text("Luma Settings")
-//                .font(.system(size: 18, weight: .semibold))
-//                .foregroundColor(DS.Colors.textPrimary)
-//                .padding(.horizontal, 14)
-//                .padding(.top, 18)
-//                .padding(.bottom, 12)
+        VStack(alignment: .leading, spacing: 2) {
+            // Title row — no close button (Done is in the top-right of the content area)
+            Text("Luma Settings")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(DS.Colors.textPrimary)
+                .padding(.horizontal, 11)
+                .padding(.top, 20)
+                .padding(.bottom, 10)
 
             ForEach(SettingsTab.allCases) { tab in
                 settingsSidebarButton(tab: tab)
             }
-
             Spacer()
         }
-        .frame(width: 240)
-        .background(
-            DS.Colors.surface2
-                .opacity(0.8)
-        )
+        .padding(.horizontal, 10)
+        .frame(width: 220)
+        .background(DS.Colors.surface2)
     }
 
     private var settingsHeader: some View {
@@ -107,8 +116,7 @@ struct SettingsPanelView: View {
             AccountTabView(
                 accountManager: accountManager,
                 profileManager: profileManager,
-                pinManager: pinManager,
-                onResetComplete: { closeSettingsPanel() }
+                pinManager: pinManager
             )
         case .api:
             APIProfilesTabView(profileManager: profileManager)
@@ -118,8 +126,15 @@ struct SettingsPanelView: View {
             VoiceSettingsTabView()
         case .agents:
             AgentModeTabView()
+        case .customization:
+            CustomizationTabView()
         case .general:
-            GeneralTabView(pinManager: pinManager)
+            GeneralTabView(
+                pinManager: pinManager,
+                accountManager: accountManager,
+                profileManager: profileManager,
+                onResetComplete: { closeSettingsPanel() }
+            )
         }
     }
 
@@ -127,26 +142,28 @@ struct SettingsPanelView: View {
     private func settingsSidebarButton(tab: SettingsTab) -> some View {
         let isSelected = selectedTab == tab
         Button {
-            selectedTab = tab
+            withAnimation(.easeInOut(duration: 0.12)) {
+                selectedTab = tab
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isSelected ? DS.Colors.accentText : DS.Colors.textSecondary)
                     .frame(width: 20)
                 Text(tab.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isSelected ? DS.Colors.accent.opacity(0.16) : .clear)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? DS.Colors.accentSubtle : .clear)
             )
-            .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
         .onHover { isHovering in
             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
@@ -159,29 +176,32 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case model
     case voice
     case agents
+    case customization
     case general
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .account: return "Account"
-        case .api: return "API"
-        case .model: return "Model"
-        case .voice: return "Voice"
-        case .agents: return "Agents"
-        case .general: return "General"
+        case .account:       return "Account"
+        case .api:           return "API"
+        case .model:         return "Model"
+        case .voice:         return "Voice"
+        case .agents:        return "Agents"
+        case .customization: return "Customization"
+        case .general:       return "General"
         }
     }
 
     var icon: String {
         switch self {
-        case .account: return "person.circle"
-        case .api: return "key.horizontal"
-        case .model: return "cpu"
-        case .voice: return "waveform"
-        case .agents: return "bubble.left.and.bubble.right"
-        case .general: return "gearshape"
+        case .account:       return "person.circle"
+        case .api:           return "key.horizontal"
+        case .model:         return "cpu"
+        case .voice:         return "waveform"
+        case .agents:        return "bubble.left.and.bubble.right"
+        case .customization: return "paintpalette"
+        case .general:       return "gearshape"
         }
     }
 
@@ -197,6 +217,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
             return "Adjust speech voice, pitch, rate, and volume."
         case .agents:
             return "Set agent limits, defaults, and agent-mode options."
+        case .customization:
+            return "Choose accent color and agent bubble appearance."
         case .general:
             return "Open logs, app preferences, and maintenance actions."
         }
@@ -205,7 +227,9 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
 // MARK: - Tab 1: Account
 
-/// Displays the user's avatar, username, editable display name, and the destructive Reset Luma action.
+/// Displays the user's avatar, username, and editable display name.
+/// Display name edits auto-save after a 0.8s debounce — no Save button required.
+/// Danger Zone (Reset Luma) has been moved to the General tab.
 @MainActor
 private struct AccountTabView: View {
 
@@ -213,14 +237,12 @@ private struct AccountTabView: View {
     @ObservedObject var profileManager: ProfileManager
     @ObservedObject var pinManager:     PINManager
 
-    /// Called after a successful reset so the parent sheet can dismiss.
-    var onResetComplete: () -> Void
-
     /// Draft of the display name being edited in the text field.
     @State private var editedDisplayName: String = ""
 
-    /// Controls visibility of the "Reset Luma" confirmation alert.
-    @State private var isShowingResetConfirmationAlert: Bool = false
+    /// Cancellable debounce task — cancelled and recreated on every keystroke so
+    /// the actual save only fires 0.8s after the user stops typing.
+    @State private var displayNameSaveDebounceTask: Task<Void, Never>? = nil
 
     var body: some View {
         ScrollView {
@@ -245,22 +267,24 @@ private struct AccountTabView: View {
     private func accountContentView(account: LumaAccount) -> some View {
         VStack(spacing: DS.Spacing.xl) {
 
-            // Avatar + identity block
+            // Avatar — initials update live while the user types in the display name field
             VStack(spacing: DS.Spacing.sm) {
-                LumaAvatarView(initials: account.avatarInitials, size: 56)
+                LumaAvatarView(initials: liveAvatarInitials(forAccount: account), size: 56)
 
                 Text(account.username)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(DS.Colors.textPrimary)
 
-                Text(account.displayName)
+                // Display name preview also updates live as the user types
+                Text(editedDisplayName.isEmpty ? account.displayName : editedDisplayName)
                     .font(.system(size: 13))
                     .foregroundColor(DS.Colors.textSecondary)
             }
 
             Divider()
 
-            // Editable display name
+            // Editable display name — auto-saves with a 0.8s debounce after each keystroke.
+            // No Save button is needed; the hint text confirms auto-save behavior.
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 Text("Display Name")
                     .font(.system(size: 13, weight: .medium))
@@ -279,49 +303,13 @@ private struct AccountTabView: View {
                         RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
                             .stroke(DS.Colors.surface2, lineWidth: 1)
                     )
-                    // Save when the user presses Return
-                    .onSubmit {
-                        saveDisplayNameIfChanged()
-                    }
-                    // Save when the field loses focus (blur equivalent in SwiftUI)
                     .onChange(of: editedDisplayName) { _ in
-                        // We intentionally do NOT save on every keystroke;
-                        // saving happens on submit/blur via onSubmit + focusLost.
-                        // The onChange here is a no-op placeholder to make
-                        // the "blur" pattern clear for future developers.
+                        scheduleDebouncedDisplayNameSave()
                     }
-            }
 
-            Divider()
-
-            // Destructive: Reset Luma
-            VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                Text("Danger Zone")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textPrimary)
-
-                Button(role: .destructive) {
-                    isShowingResetConfirmationAlert = true
-                } label: {
-                    Text("Reset Luma")
-                        .font(.system(size: 13))
-                        .foregroundColor(DS.Colors.destructive)
-                }
-                .buttonStyle(.plain)
-                .onHover { isHovering in
-                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-                .alert(
-                    "Reset Luma",
-                    isPresented: $isShowingResetConfirmationAlert
-                ) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Reset", role: .destructive) {
-                        performResetLuma()
-                    }
-                } message: {
-                    Text("This will erase all data and restart onboarding. Are you sure?")
-                }
+                Text("Changes save automatically.")
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
             }
         }
     }
@@ -338,22 +326,34 @@ private struct AccountTabView: View {
 
     // MARK: Actions
 
+    /// Computes avatar initials from the current `editedDisplayName` draft so the
+    /// avatar updates live while the user types — before the save is committed.
+    private func liveAvatarInitials(forAccount account: LumaAccount) -> String {
+        let source = editedDisplayName.count >= 2 ? editedDisplayName : account.username
+        return String(source.prefix(2)).uppercased()
+    }
+
+    /// Cancels any pending debounce task and schedules a new one that fires after 0.8s.
+    /// The save only happens when the user pauses or stops typing.
+    private func scheduleDebouncedDisplayNameSave() {
+        displayNameSaveDebounceTask?.cancel()
+        displayNameSaveDebounceTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                saveDisplayNameIfChanged()
+            } catch {
+                // Task was cancelled (user kept typing) — no action needed
+            }
+        }
+    }
+
     private func saveDisplayNameIfChanged() {
         let trimmedName = editedDisplayName.trimmingCharacters(in: .whitespaces)
         // Only write to AccountManager if the value actually changed, to avoid
-        // unnecessary Keychain/UserDefaults writes on every focus cycle.
+        // unnecessary UserDefaults writes on every debounce cycle.
         guard !trimmedName.isEmpty,
               trimmedName != accountManager.currentAccount?.displayName else { return }
         accountManager.updateDisplayName(trimmedName)
-    }
-
-    private func performResetLuma() {
-        accountManager.deleteAccount()
-        try? profileManager.deleteAllProfiles()
-        // Wipe the entire vault (PIN, API keys)
-        VaultManager.shared.deleteAll()
-        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
-        onResetComplete()
     }
 }
 
@@ -364,6 +364,9 @@ private struct AccountTabView: View {
 private struct APIProfilesTabView: View {
 
     @ObservedObject var profileManager: ProfileManager
+
+    // Triggers re-render so the "Add Profile" button accent color updates immediately.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
 
     /// Whether the "Add Profile" inline form is expanded.
     @State private var isAddProfileFormExpanded: Bool = false
@@ -468,6 +471,9 @@ private struct APIProfilesTabView: View {
 @MainActor
 private struct ProfileRowView: View {
 
+    // Triggers re-render so the checkmark and "Set Default" button reflect the new accent immediately.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+
     let profile: LumaAPIProfile
     let totalProfileCount: Int
     let isEditFormExpanded: Bool
@@ -571,6 +577,9 @@ private struct ProfileRowView: View {
 /// Shared inline form used for both adding a new profile and editing an existing one.
 @MainActor
 private struct ProfileFormView: View {
+
+    // Triggers re-render so "Test Connection" and "Save Profile" accent colors update immediately.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
 
     enum FormMode { case add, edit }
 
@@ -871,83 +880,140 @@ private struct ProfileFormView: View {
 
 // MARK: - Tab 3: Model
 
-/// Shows the active profile's selected model and allows editing it as plain text.
-/// A full OpenRouter model picker will replace this text field in a future iteration.
+/// Searchable model picker with provider sections (Anthropic, OpenRouter, Google AI).
+/// Tapping a row auto-saves the selection to the active profile immediately.
+/// A free-text field at the bottom accepts any custom model identifier as a fallback.
 @MainActor
 private struct ModelTabView: View {
 
     @ObservedObject var profileManager: ProfileManager
 
-    /// Draft model string being typed by the user.
-    @State private var editedModelString: String = ""
+    // Triggers re-render so the selected model row highlight and "Save" button update immediately.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+
+    /// Text typed in the search field — filters all three provider sections simultaneously.
+    @State private var searchText: String = ""
+
+    /// Draft for the free-text custom model fallback field.
+    @State private var customModelText: String = ""
+
+    // MARK: Static model lists grouped by provider
+
+    private let anthropicModels: [(id: String, label: String)] = [
+        ("claude-opus-4-6",            "Claude Opus 4.6"),
+        ("claude-sonnet-4-6",          "Claude Sonnet 4.6"),
+        ("claude-haiku-4-5-20251001",  "Claude Haiku 4.5"),
+        ("claude-opus-4",              "Claude Opus 4"),
+        ("claude-sonnet-4",            "Claude Sonnet 4"),
+        ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"),
+    ]
+
+    private let openRouterModels: [(id: String, label: String)] = [
+        ("google/gemini-2.5-flash:free",           "Gemini 2.5 Flash (free)"),
+        ("google/gemini-2.5-pro:free",             "Gemini 2.5 Pro (free)"),
+        ("meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (free)"),
+        ("deepseek/deepseek-chat:free",            "DeepSeek Chat (free)"),
+        ("deepseek/deepseek-r1:free",              "DeepSeek R1 (free)"),
+        ("microsoft/phi-4:free",                   "Phi-4 (free)"),
+        ("qwen/qwen-2.5-72b-instruct:free",        "Qwen 2.5 72B (free)"),
+        ("openai/gpt-4o",                          "GPT-4o"),
+        ("openai/gpt-4o-mini",                     "GPT-4o Mini"),
+        ("anthropic/claude-sonnet-4-6",            "Claude Sonnet 4.6 (via OR)"),
+    ]
+
+    private let googleModels: [(id: String, label: String)] = [
+        ("gemini-2.0-flash", "Gemini 2.0 Flash"),
+        ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+        ("gemini-2.5-pro",   "Gemini 2.5 Pro"),
+    ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
 
-                // Subtitle explaining the per-profile relationship
                 Text("Model is selected per profile. Manage profiles in the API Profiles tab.")
                     .font(.system(size: 13))
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let activeProfile = profileManager.activeProfile {
-                    VStack(alignment: .leading, spacing: DS.Spacing.md) {
 
-                        // Active profile context
-                        HStack(spacing: DS.Spacing.sm) {
-                            Text("Active Profile:")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(DS.Colors.textPrimary)
-                            Text(activeProfile.name)
-                                .font(.system(size: 13))
-                                .foregroundColor(DS.Colors.textSecondary)
-                        }
+                    // Active profile context
+                    HStack(spacing: DS.Spacing.sm) {
+                        Text("Active Profile:")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textPrimary)
+                        Text(activeProfile.name)
+                            .font(.system(size: 13))
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
 
-                        // Model string field
-                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                            Text("Model")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(DS.Colors.textPrimary)
+                    // Search field — filters all provider sections
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 12))
+                            .foregroundColor(DS.Colors.textTertiary)
+                        TextField("Search models…", text: $searchText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+                            .foregroundColor(DS.Colors.textPrimary)
+                    }
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
+                            .fill(DS.Colors.surface1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
+                            .stroke(DS.Colors.surface2, lineWidth: 1)
+                    )
 
-                            TextField("e.g. google/gemini-2.5-flash:free", text: $editedModelString)
+                    // Provider sections — each hides itself when the filtered list is empty
+                    modelSection(title: "Anthropic", models: filteredModels(anthropicModels), activeProfile: activeProfile)
+                    modelSection(title: "OpenRouter", models: filteredModels(openRouterModels), activeProfile: activeProfile)
+                    modelSection(title: "Google AI", models: filteredModels(googleModels), activeProfile: activeProfile)
+
+                    Divider()
+
+                    // Free-text fallback for any custom or unlisted model identifier
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        Text("Custom Model ID")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textPrimary)
+
+                        HStack(spacing: 8) {
+                            TextField("e.g. google/gemini-2.5-flash:free", text: $customModelText)
                                 .textFieldStyle(.plain)
                                 .font(.system(size: 13))
                                 .foregroundColor(DS.Colors.textPrimary)
-                                .padding(DS.Spacing.sm)
-                                .background(
-                                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
-                                        .fill(DS.Colors.surface1)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
-                                        .stroke(DS.Colors.surface2, lineWidth: 1)
-                                )
-                                // Save on Return
-                                .onSubmit {
-                                    saveModelStringToActiveProfile(activeProfile: activeProfile)
+                                .onSubmit { saveCustomModel(activeProfile: activeProfile) }
+
+                            Button("Save") { saveCustomModel(activeProfile: activeProfile) }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(DS.Colors.accentText)
+                                .disabled(customModelText.trimmingCharacters(in: .whitespaces).isEmpty)
+                                .onHover { isHovering in
+                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
+                        }
+                        .padding(DS.Spacing.sm)
+                        .background(
+                            RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
+                                .fill(DS.Colors.surface1)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.CornerRadius.medium)
+                                .stroke(DS.Colors.surface2, lineWidth: 1)
+                        )
 
-                            Text("Paste any OpenRouter or provider model ID here. A searchable picker is coming soon.")
-                                .font(.system(size: 11))
-                                .foregroundColor(DS.Colors.textTertiary)
-                        }
-
-                        // Save button
-                        Button("Save Model") {
-                            saveModelStringToActiveProfile(activeProfile: activeProfile)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(DS.Colors.textOnAccent)
-                        .padding(.horizontal, DS.Spacing.md)
-                        .padding(.vertical, DS.Spacing.sm)
-                        .background(DS.Colors.accent)
-                        .cornerRadius(DS.CornerRadius.small)
-                        .onHover { isHovering in
-                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                        }
+                        Text("Paste any OpenRouter or provider model ID. Tap a row above to select a preset.")
+                            .font(.system(size: 11))
+                            .foregroundColor(DS.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+
                 } else {
                     Text("No active profile. Add a profile in the API Profiles tab.")
                         .font(.system(size: 13))
@@ -957,17 +1023,164 @@ private struct ModelTabView: View {
             .padding(DS.Spacing.xl)
         }
         .onAppear {
-            editedModelString = profileManager.activeProfile?.selectedModel ?? ""
+            customModelText = profileManager.activeProfile?.selectedModel ?? ""
         }
     }
 
-    private func saveModelStringToActiveProfile(activeProfile: LumaAPIProfile) {
-        let trimmedModel = editedModelString.trimmingCharacters(in: .whitespaces)
-        guard !trimmedModel.isEmpty else { return }
-        // Build an updated copy of the active profile with the new model string
+    // MARK: Helpers
+
+    /// Filters a model list by the current search text. Returns all when search is empty.
+    private func filteredModels(_ models: [(id: String, label: String)]) -> [(id: String, label: String)] {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return models }
+        let lowercased = query.lowercased()
+        return models.filter {
+            $0.id.lowercased().contains(lowercased) || $0.label.lowercased().contains(lowercased)
+        }
+    }
+
+    /// Renders a provider section with its header label and model rows.
+    /// Hidden entirely when the filtered list for that provider is empty.
+    @ViewBuilder
+    private func modelSection(title: String, models: [(id: String, label: String)], activeProfile: LumaAPIProfile) -> some View {
+        if !models.isEmpty {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .padding(.bottom, 2)
+
+                VStack(spacing: 2) {
+                    ForEach(models, id: \.id) { model in
+                        modelRowView(model: model, activeProfile: activeProfile)
+                    }
+                }
+                .background(DS.Colors.surface1)
+                .cornerRadius(DS.CornerRadius.medium)
+            }
+        }
+    }
+
+    /// A single tappable model row. Saves immediately on tap.
+    /// Selected row shows accentSubtle background and a checkmark in accentText.
+    private func modelRowView(model: (id: String, label: String), activeProfile: LumaAPIProfile) -> some View {
+        let isSelected = activeProfile.selectedModel == model.id
+        return Button {
+            saveModel(modelID: model.id, activeProfile: activeProfile)
+        } label: {
+            HStack(spacing: DS.Spacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.label)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(DS.Colors.textPrimary)
+                    Text(model.id)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(DS.Colors.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(DS.Colors.accentText)
+                }
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+            .background(isSelected ? DS.Colors.accentSubtle : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    private func saveModel(modelID: String, activeProfile: LumaAPIProfile) {
         var updatedProfile = activeProfile
-        updatedProfile.selectedModel = trimmedModel
+        updatedProfile.selectedModel = modelID
         profileManager.updateProfile(updatedProfile)
+    }
+
+    private func saveCustomModel(activeProfile: LumaAPIProfile) {
+        let trimmedModel = customModelText.trimmingCharacters(in: .whitespaces)
+        guard !trimmedModel.isEmpty else { return }
+        saveModel(modelID: trimmedModel, activeProfile: activeProfile)
+    }
+}
+
+// MARK: - Tab: Customization
+
+/// Accent theme picker + agent bubble style and behavior sliders.
+/// Consolidated from GeneralTabView (accent) and AgentModeTabView (bubble).
+@MainActor
+private struct CustomizationTabView: View {
+
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.blue.rawValue
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+                accentThemeSection
+                Divider()
+                BubbleAppearanceSectionView()
+            }
+            .padding(DS.Spacing.xl)
+        }
+    }
+
+    // MARK: Accent Theme
+
+    private var accentThemeSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Accent Theme")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            HStack(spacing: 16) {
+                ForEach(LumaAccentTheme.allCases) { theme in
+                    accentThemeCircle(theme: theme)
+                }
+                Spacer()
+            }
+
+            Text("Updates the cursor color, agent bubble glow, and accent highlights throughout the app.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func accentThemeCircle(theme: LumaAccentTheme) -> some View {
+        let isSelected = accentThemeRaw == theme.rawValue
+        return Button {
+            accentThemeRaw = theme.rawValue
+        } label: {
+            VStack(spacing: 7) {
+                Circle()
+                    .fill(theme.accent)
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Circle()
+                            .stroke(DS.Colors.background, lineWidth: 2)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(theme.accent, lineWidth: 2)
+                            .padding(-4)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+                    .animation(.easeInOut(duration: 0.15), value: isSelected)
+
+                Text(theme.title)
+                    .font(.system(size: 10))
+                    .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textTertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }
 
@@ -977,12 +1190,22 @@ private struct ModelTabView: View {
 @MainActor
 private struct GeneralTabView: View {
 
-    @ObservedObject var pinManager: PINManager
+    @ObservedObject var pinManager:     PINManager
+    @ObservedObject var accountManager: AccountManager
+    @ObservedObject var profileManager: ProfileManager
+
+    /// Called after a successful Reset Luma so the settings window can close.
+    var onResetComplete: () -> Void
 
     // MARK: Launch at Login
     // Persisted in UserDefaults so it survives restarts.
     // The actual SMLoginItem enable/disable call happens in toggleLaunchAtLogin(enabled:).
     @AppStorage("launchAtLogin") private var launchAtLoginEnabled: Bool = false
+
+    // MARK: Accent Theme
+    // Stored in the same UserDefaults key that LumaAccentTheme.current reads from.
+    // Changing this live-updates all DS.Colors.accent / DS.Colors.accentText / overlayCursorBlue calls.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.blue.rawValue
 
     // MARK: PIN sheet state
     @State private var isShowingPINEntrySheet: Bool = false
@@ -1001,9 +1224,13 @@ private struct GeneralTabView: View {
                 Divider()
                 memorySection
                 Divider()
+                userOutlookSection
+                Divider()
                 historySection
                 Divider()
                 aboutSection
+                Divider()
+                dangerZoneSection
             }
             .padding(DS.Spacing.xl)
         }
@@ -1015,6 +1242,65 @@ private struct GeneralTabView: View {
                 onSuccess: { isShowingPINEntrySheet = false },
                 onCancel:  { isShowingPINEntrySheet = false }
             )
+        }
+    }
+
+    // MARK: Accent Theme Section
+
+    /// Four colored circles. Tapping one updates `accentThemeRaw` in UserDefaults,
+    /// which `LumaAccentTheme.current` reads at render time — so DS.Colors.accent,
+    /// DS.Colors.accentText, and DS.Colors.overlayCursorBlue all update live.
+    private var accentThemeSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Accent Theme")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            HStack(spacing: 16) {
+                ForEach(LumaAccentTheme.allCases) { theme in
+                    accentThemeCircle(theme: theme)
+                }
+                Spacer()
+            }
+
+            Text("Affects the cursor color, bubble border, and accent highlights throughout the app.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func accentThemeCircle(theme: LumaAccentTheme) -> some View {
+        let isSelected = accentThemeRaw == theme.rawValue
+        return Button {
+            accentThemeRaw = theme.rawValue
+        } label: {
+            VStack(spacing: 7) {
+                Circle()
+                    .fill(theme.accent)
+                    .frame(width: 36, height: 36)
+                    // Ring: bg gap → accent ring when selected
+                    .overlay(
+                        Circle()
+                            .stroke(DS.Colors.background, lineWidth: 2)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(theme.accent, lineWidth: 2)
+                            .padding(-4)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+                    .animation(.easeInOut(duration: 0.15), value: isSelected)
+
+                Text(theme.title)
+                    .font(.system(size: 10))
+                    .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textTertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 
@@ -1177,6 +1463,45 @@ private struct GeneralTabView: View {
         }
     }
 
+    // MARK: User Outlook Section
+
+    /// Shows the "User Profile" (Outlook) section — a read-only AI-generated behavioral
+    /// profile Luma builds silently from every interaction. Stored in a hidden directory
+    /// in Application Support so it persists across launches without cluttering the UI.
+    private var userOutlookSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+
+            Text("User Profile")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            Text("Luma observes every interaction and quietly builds a behavioral profile — your expertise, interests, and work patterns. This profile personalizes every response and is never shared.")
+                .font(.system(size: 13))
+                .foregroundColor(DS.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                LumaOutlookWindowManager.shared.showOutlookWindow()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .font(.system(size: 12))
+                    Text("View Profile")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(DS.Colors.textOnAccent)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Colors.accent)
+                .cornerRadius(DS.CornerRadius.small)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+    }
+
     // MARK: History Section
 
     private var historySection: some View {
@@ -1240,6 +1565,65 @@ private struct GeneralTabView: View {
         // once the LoginItemHelper target and entitlements are configured.
         LumaLogger.log("[LaunchAtLogin] TODO: SMLoginItemSetEnabled called with enabled=\(enabled)")
     }
+
+    // MARK: Danger Zone Section
+
+    /// Destructive Reset Luma action — moved here from the Account tab so account
+    /// management stays clean and the destructive action lives with other maintenance tools.
+    private var dangerZoneSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Danger Zone")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.destructive)
+
+            Button(role: .destructive) {
+                showResetLumaConfirmationAlert()
+            } label: {
+                Text("Reset Luma")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.destructive)
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.CornerRadius.small, style: .continuous)
+                            .stroke(DS.Colors.destructive, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+            Text("Clears all settings, profiles, and conversation history. Cannot be undone.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Shows a native NSAlert confirmation before executing the destructive reset.
+    /// NSAlert is used (rather than SwiftUI .alert) so the dialog is modal and
+    /// the destructive button gets native red styling from the system.
+    private func showResetLumaConfirmationAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Reset Luma?"
+        alert.informativeText = "This will clear all settings, profiles, and conversation history."
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "Reset")
+        alert.addButton(withTitle: "Cancel")
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            performResetLuma()
+        }
+    }
+
+    private func performResetLuma() {
+        accountManager.deleteAccount()
+        try? profileManager.deleteAllProfiles()
+        VaultManager.shared.deleteAll()
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        onResetComplete()
+    }
 }
 
 // MARK: - Tab 5: Voice Settings
@@ -1250,25 +1634,41 @@ private struct GeneralTabView: View {
 private struct VoiceSettingsTabView: View {
 
     // Voice settings backed by UserDefaults via the same keys NativeTTSClient reads.
-    @AppStorage(NativeTTSClient.voiceGenderKey)  private var voiceGender: String = "female"
-    @AppStorage(NativeTTSClient.voicePitchKey)   private var voicePitch: Double  = 1.4
-    @AppStorage(NativeTTSClient.voiceRateKey)    private var voiceRate: Double    = 0.52
-    @AppStorage(NativeTTSClient.voiceVolumeKey)  private var voiceVolume: Double  = 1.0
+    @AppStorage(NativeTTSClient.voiceGenderKey)      private var voiceGender: String  = "female"
+    @AppStorage(NativeTTSClient.voiceNameKey)        private var voiceName: String    = ""
+    @AppStorage(NativeTTSClient.voicePitchKey)       private var voicePitch: Double   = 1.4
+    @AppStorage(NativeTTSClient.voiceRateKey)        private var voiceRate: Double     = 0.52
+    @AppStorage(NativeTTSClient.voiceVolumeKey)      private var voiceVolume: Double   = 1.0
+    @AppStorage(NativeTTSClient.shouldSanitizeKey)    private var shouldSanitize: Bool     = true
+    // Default true — preserves existing behavior (Luma always speaks responses aloud).
+    @AppStorage(NativeTTSClient.autoReadResponsesKey) private var autoReadResponses: Bool = true
 
     /// Whether a preview utterance is currently playing.
     @State private var isPreviewPlaying: Bool = false
+
+    /// English-language voices installed on this Mac, sorted by display name.
+    /// Discovered dynamically from AVSpeechSynthesisVoice so new voices appear automatically.
+    private var availableEnglishVoices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("en") }
+            .sorted { $0.name < $1.name }
+    }
+
+    /// Display name of the currently active voice, looked up from the stored identifier.
+    /// Falls back to gender-based name when no specific voice is selected.
+    private var activeVoiceDisplayName: String {
+        guard !voiceName.isEmpty else {
+            return voiceGender == "male" ? "Aaron" : "Samantha"
+        }
+        return AVSpeechSynthesisVoice(identifier: voiceName)?.name ?? voiceName
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
 
-                Text("Configure how Luma sounds when speaking responses.")
-                    .font(.system(size: 13))
-                    .foregroundColor(DS.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                // Gender toggle
-                voiceGenderSection
+                // Voice picker — named system voices as capsule buttons
+                voicePickerSection
 
                 Divider()
 
@@ -1277,21 +1677,23 @@ private struct VoiceSettingsTabView: View {
                     title: "Pitch",
                     value: $voicePitch,
                     range: 0.5...2.0,
-                    defaultValue: 1.4,
-                    valueLabel: String(format: "%.2f", voicePitch),
-                    description: "Higher values produce a higher-pitched voice."
+                    sliderColor: DS.Colors.success,
+                    leftLabel: "Low",
+                    rightLabel: "High",
+                    valueLabel: String(format: "%.2f", voicePitch)
                 )
 
                 Divider()
 
                 // Rate / Tempo slider
                 voiceSliderSection(
-                    title: "Rate / Tempo",
+                    title: "Speaking Rate",
                     value: $voiceRate,
                     range: 0.1...1.0,
-                    defaultValue: 0.52,
-                    valueLabel: String(format: "%.2f", voiceRate),
-                    description: "Lower values speak more slowly."
+                    sliderColor: DS.Colors.accent,
+                    leftLabel: "Slow",
+                    rightLabel: "Fast",
+                    valueLabel: String(format: "%.0f%%", (voiceRate / 1.0) * 100)
                 )
 
                 Divider()
@@ -1301,49 +1703,72 @@ private struct VoiceSettingsTabView: View {
                     title: "Volume",
                     value: $voiceVolume,
                     range: 0.0...1.0,
-                    defaultValue: 1.0,
-                    valueLabel: String(format: "%.0f%%", voiceVolume * 100),
-                    description: "Speech output volume."
+                    sliderColor: DS.Colors.warning,
+                    leftLabel: "Quiet",
+                    rightLabel: "Loud",
+                    valueLabel: String(format: "%.0f%%", voiceVolume * 100)
                 )
 
                 Divider()
 
-                // Preview button
+                // Behaviour toggles
+                behaviourSection
+
+                Divider()
+
+                // Preview
                 previewVoiceSection
             }
             .padding(DS.Spacing.xl)
         }
     }
 
-    // MARK: Gender Section
+    // MARK: Voice Picker Section
 
-    private var voiceGenderSection: some View {
+    private var voicePickerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            Text("Voice Gender")
+            Text("Voice")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(DS.Colors.textPrimary)
 
-            HStack(spacing: 0) {
-                voiceGenderToggleButton(label: "Female", value: "female")
-                voiceGenderToggleButton(label: "Male",   value: "male")
+            // Horizontally wrapping capsule chips — one per installed English voice.
+            // Tapping a chip selects the voice and immediately plays an audio preview.
+            FlowLayout(spacing: 8) {
+                ForEach(availableEnglishVoices, id: \.identifier) { voice in
+                    voiceChip(voice: voice)
+                }
             }
-            .background(DS.Colors.surface1)
-            .cornerRadius(DS.CornerRadius.medium)
+
+            Text("Shows all English voices installed on this Mac. Install more in System Settings → Accessibility → Spoken Content.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func voiceGenderToggleButton(label: String, value: String) -> some View {
-        let isSelected = voiceGender == value
+    /// A single voice chip. Tapping selects the voice by saving its AVSpeechSynthesisVoice
+    /// identifier to UserDefaults and immediately triggers a short audio preview so the
+    /// user can hear the voice before committing.
+    private func voiceChip(voice: AVSpeechSynthesisVoice) -> some View {
+        let isSelected = voiceName == voice.identifier
         return Button {
-            voiceGender = value
+            // Store the full identifier so NativeTTSClient can call AVSpeechSynthesisVoice(identifier:) directly
+            voiceName = voice.identifier
+            Task { await previewCurrentVoice() }
         } label: {
-            Text(label)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DS.Spacing.sm)
-                .background(isSelected ? DS.Colors.surface2 : Color.clear)
-                .cornerRadius(DS.CornerRadius.medium)
+            Text(voice.name)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(isSelected ? .white : DS.Colors.textSecondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? DS.Colors.accent : DS.Colors.surface2)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? DS.Colors.accentHover : DS.Colors.borderSubtle, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .onHover { isHovering in
@@ -1357,9 +1782,10 @@ private struct VoiceSettingsTabView: View {
         title: String,
         value: Binding<Double>,
         range: ClosedRange<Double>,
-        defaultValue: Double,
-        valueLabel: String,
-        description: String
+        sliderColor: Color,
+        leftLabel: String,
+        rightLabel: String,
+        valueLabel: String
     ) -> some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             HStack {
@@ -1369,39 +1795,108 @@ private struct VoiceSettingsTabView: View {
 
                 Spacer()
 
-                Text(valueLabel)
-                    .font(.system(size: 13))
-                    .foregroundColor(DS.Colors.textSecondary)
-                    .monospacedDigit()
+                HStack(spacing: 10) {
+                    Text(leftLabel)
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+
+                    Text(valueLabel)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(sliderColor)
+                        .monospacedDigit()
+                        .frame(minWidth: 36, alignment: .trailing)
+
+                    Text(rightLabel)
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
             }
 
             Slider(value: value, in: range)
-                .tint(DS.Colors.accent)
-
-            Text(description)
-                .font(.system(size: 11))
-                .foregroundColor(DS.Colors.textTertiary)
+                .tint(sliderColor)
         }
+    }
+
+    // MARK: Behaviour Section
+
+    private var behaviourSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Behaviour")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            // Strip coordinate strings toggle
+            settingsToggleRow(
+                label: "Strip coordinate strings",
+                description: "Removes coordinate patterns like 'point 400, 200' from spoken text",
+                isOn: $shouldSanitize
+            )
+
+            // Auto-read responses toggle
+            settingsToggleRow(
+                label: "Auto-read responses",
+                description: "Speaks every AI response aloud automatically",
+                isOn: $autoReadResponses
+            )
+        }
+    }
+
+    /// A labelled toggle row used in the Behaviour section.
+    private func settingsToggleRow(label: String, description: String, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .top, spacing: DS.Spacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .tint(DS.Colors.accent)
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: Preview Section
 
     private var previewVoiceSection: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        HStack(spacing: DS.Spacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(activeVoiceDisplayName) · Rate \(String(format: "%.0f", (voiceRate / 1.0) * 100))% · Pitch \(String(format: "%.2f", voicePitch))")
+                    .font(.system(size: 12))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Text("Click play to hear a sample")
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 Task { await previewCurrentVoice() }
             } label: {
-                HStack(spacing: DS.Spacing.sm) {
+                HStack(spacing: 5) {
                     Image(systemName: isPreviewPlaying ? "speaker.wave.3.fill" : "play.fill")
-                        .font(.system(size: 12))
-                    Text(isPreviewPlaying ? "Playing..." : "Preview Voice")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 11))
+                    Text(isPreviewPlaying ? "Playing…" : "▶ Play")
+                        .font(.system(size: 12, weight: .medium))
                 }
-                .foregroundColor(DS.Colors.textOnAccent)
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.vertical, DS.Spacing.sm)
-                .background(DS.Colors.accent)
-                .cornerRadius(DS.CornerRadius.small)
+                .foregroundColor(DS.Colors.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(DS.Colors.surface2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                )
+                .cornerRadius(8)
             }
             .buttonStyle(.plain)
             .disabled(isPreviewPlaying)
@@ -1409,6 +1904,13 @@ private struct VoiceSettingsTabView: View {
                 if isHovering && !isPreviewPlaying { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
         }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface1)
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+        )
+        .cornerRadius(DS.CornerRadius.medium)
     }
 
     /// Speaks a short test string using the current voice settings.
@@ -1423,6 +1925,54 @@ private struct VoiceSettingsTabView: View {
             // Preview is best-effort — swallow cancellation or other errors
         }
         isPreviewPlaying = false
+    }
+}
+
+// MARK: - FlowLayout
+//
+// A simple wrapping horizontal layout used for the voice picker chips.
+// Chips wrap to a new row when they overflow the available width.
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let containerWidth = proposal.width ?? .infinity
+        var currentRowWidth: CGFloat = 0
+        var currentRowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+
+        for subview in subviews {
+            let subviewSize = subview.sizeThatFits(.unspecified)
+            if currentRowWidth + subviewSize.width > containerWidth && currentRowWidth > 0 {
+                totalHeight += currentRowHeight + spacing
+                currentRowWidth = subviewSize.width + spacing
+                currentRowHeight = subviewSize.height
+            } else {
+                currentRowWidth += subviewSize.width + spacing
+                currentRowHeight = max(currentRowHeight, subviewSize.height)
+            }
+        }
+        totalHeight += currentRowHeight
+        return CGSize(width: containerWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var originX = bounds.minX
+        var originY = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let subviewSize = subview.sizeThatFits(.unspecified)
+            if originX + subviewSize.width > bounds.maxX && originX > bounds.minX {
+                originX = bounds.minX
+                originY += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: originX, y: originY), proposal: ProposedViewSize(subviewSize))
+            originX += subviewSize.width + spacing
+            rowHeight = max(rowHeight, subviewSize.height)
+        }
     }
 }
 

@@ -40,6 +40,14 @@ final class NativeTTSClient: NSObject, AVSpeechSynthesizerDelegate {
     /// Strips coordinate tokens and related technical patterns from `text` before speaking.
     /// Prevents the synthesizer from reading out things like "point 400 comma 200" or
     /// "x colon 150 y colon 300" that Claude occasionally includes in its responses.
+    /// Only runs when the "Strip coordinate strings" setting is enabled (defaults to true).
+    private func sanitizeSpeechIfEnabled(_ text: String) -> String {
+        // Default to true so existing users keep the current behavior unless they opt out.
+        let shouldSanitize = UserDefaults.standard.object(forKey: Self.shouldSanitizeKey) as? Bool ?? true
+        guard shouldSanitize else { return text }
+        return sanitizeSpeech(text)
+    }
+
     private func sanitizeSpeech(_ text: String) -> String {
         var cleaned = text
 
@@ -70,14 +78,21 @@ final class NativeTTSClient: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: - UserDefaults Keys for Voice Settings
 
-    /// UserDefaults key for voice gender preference ("male" or "female").
+    /// UserDefaults key for voice gender preference ("male" or "female"). Legacy — voiceNameKey takes precedence.
     static let voiceGenderKey   = "luma.voice.gender"
+    /// UserDefaults key for specific voice name ("Samantha", "Karen", "Daniel", "Moira", "Tessa", "Veena").
+    /// When set, this overrides the gender-based selection entirely.
+    static let voiceNameKey     = "luma.voice.name"
     /// UserDefaults key for pitch multiplier (Float, 0.5–2.0).
     static let voicePitchKey    = "luma.voice.pitch"
     /// UserDefaults key for speech rate (Float, 0.1–1.0).
     static let voiceRateKey     = "luma.voice.rate"
     /// UserDefaults key for speech volume (Float, 0.0–1.0).
     static let voiceVolumeKey   = "luma.voice.volume"
+    /// UserDefaults key for whether to strip coordinate strings from spoken text (Bool, default true).
+    static let shouldSanitizeKey = "luma.voice.shouldSanitize"
+    /// UserDefaults key for whether to auto-read every AI response aloud (Bool, default false).
+    static let autoReadResponsesKey = "luma.voice.autoReadResponses"
 
     /// Speaks `text` using a natural macOS voice. Returns once playback starts.
     /// The caller can poll `isPlaying` to wait for completion.
@@ -86,27 +101,37 @@ final class NativeTTSClient: NSObject, AVSpeechSynthesizerDelegate {
 
         stopPlayback()
 
-        let utterance = AVSpeechUtterance(string: sanitizeSpeech(text))
+        let utterance = AVSpeechUtterance(string: sanitizeSpeechIfEnabled(text))
 
         // Read voice settings from UserDefaults, falling back to original defaults
         let defaults = UserDefaults.standard
 
-        let storedRate = defaults.object(forKey: Self.voiceRateKey) as? Float
+        // @AppStorage writes Double to UserDefaults, so we must read as Double then cast to Float.
+        // Reading as? Float would always fail (wrong type), causing the hardcoded default to be used.
+        let storedRate = (defaults.object(forKey: Self.voiceRateKey) as? Double).map { Float($0) }
         utterance.rate = storedRate ?? 0.52
 
-        let storedPitch = defaults.object(forKey: Self.voicePitchKey) as? Float
+        let storedPitch = (defaults.object(forKey: Self.voicePitchKey) as? Double).map { Float($0) }
         utterance.pitchMultiplier = storedPitch ?? 1.4
 
-        let storedVolume = defaults.object(forKey: Self.voiceVolumeKey) as? Float
+        let storedVolume = (defaults.object(forKey: Self.voiceVolumeKey) as? Double).map { Float($0) }
         utterance.volume = storedVolume ?? 1.0
 
-        // Determine voice based on gender setting
-        let gender = defaults.string(forKey: Self.voiceGenderKey) ?? "female"
-        utterance.voice = resolveVoiceForGender(gender)
+        // Determine voice — specific identifier takes priority over gender setting.
+        // The stored value may be a full AVSpeechSynthesisVoice identifier
+        // (e.g. "com.apple.voice.enhanced.en-US.Samantha") from the dynamic picker,
+        // or a legacy display name (e.g. "Samantha") from the previous static picker.
+        // Try as identifier first, then fall back to display-name resolution for legacy values.
+        if let storedVoiceValue = defaults.string(forKey: Self.voiceNameKey), !storedVoiceValue.isEmpty {
+            utterance.voice = AVSpeechSynthesisVoice(identifier: storedVoiceValue) ?? resolveVoiceForName(storedVoiceValue)
+        } else {
+            let gender = defaults.string(forKey: Self.voiceGenderKey) ?? "female"
+            utterance.voice = resolveVoiceForGender(gender)
+        }
 
         isPlaying = true
         synthesizer.speak(utterance)
-        LumaLogger.log("Native TTS: speaking \(text.count) characters (rate=\(utterance.rate), pitch=\(utterance.pitchMultiplier), vol=\(utterance.volume), gender=\(gender))")
+        LumaLogger.log("Native TTS: speaking \(text.count) characters (rate=\(utterance.rate), pitch=\(utterance.pitchMultiplier), vol=\(utterance.volume))")
     }
 
     /// Resolves the best available AVSpeechSynthesisVoice for the given gender string.
@@ -136,6 +161,32 @@ final class NativeTTSClient: NSObject, AVSpeechSynthesizerDelegate {
             }
             return AVSpeechSynthesisVoice(language: "en-US")
         }
+    }
+
+    /// Resolves an AVSpeechSynthesisVoice by a short display name like "Samantha" or "Daniel".
+    /// Tries the enhanced variant first, then compact, then falls back to gender-based selection.
+    private func resolveVoiceForName(_ name: String) -> AVSpeechSynthesisVoice? {
+        // Map display name → known bundle IDs for macOS system voices.
+        // Tries enhanced first (higher quality), falls back to compact.
+        let voiceCandidates: [String: [String]] = [
+            "Samantha": ["com.apple.voice.enhanced.en-US.Samantha", "com.apple.ttsbundle.Samantha-compact"],
+            "Karen":    ["com.apple.voice.enhanced.en-AU.Karen",    "com.apple.ttsbundle.Karen-compact"],
+            "Daniel":   ["com.apple.voice.enhanced.en-GB.Daniel",   "com.apple.ttsbundle.Daniel-compact"],
+            "Moira":    ["com.apple.voice.enhanced.en-IE.Moira",    "com.apple.ttsbundle.Moira-compact"],
+            "Tessa":    ["com.apple.voice.enhanced.en-ZA.Tessa",    "com.apple.ttsbundle.Tessa-compact"],
+            "Veena":    ["com.apple.voice.enhanced.en-IN.Veena",    "com.apple.ttsbundle.Veena-compact"],
+        ]
+
+        if let identifiers = voiceCandidates[name] {
+            for identifier in identifiers {
+                if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
+                    return voice
+                }
+            }
+        }
+
+        // Name not recognised or voice not installed — fall back to gender-based selection
+        return resolveVoiceForGender("female")
     }
 
     /// Stops any in-progress playback immediately.

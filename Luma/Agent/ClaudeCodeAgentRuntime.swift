@@ -126,7 +126,9 @@ final class ClaudeCodeAgentRuntime: AgentRuntime {
     }
 
     func submitPrompt(sessionId: UUID, prompt: String) async throws {
-        var systemContext = AgentMemoryIntegration.loadSummarizedMemoryForSystemContext()
+        // Load the combined memory + behavioral outlook prefix so the CLI agent always has
+        // full user context. Falls back to empty string if no memory or profile exists yet.
+        var systemContext = AgentMemoryIntegration.fullSystemContextPrefix() ?? ""
         let workingDirectory = UserDefaults.standard.string(forKey: "luma.agent.workingDirectory") ?? NSHomeDirectory()
 
         // Append persona, file-storage defaults, and completion format so the CLI agent
@@ -136,8 +138,10 @@ final class ClaudeCodeAgentRuntime: AgentRuntime {
 
         let completionFormat = """
         You are Luma, a helpful macOS assistant. Be warm, direct, and conversational — \
-        like a knowledgeable colleague, not a robot. Never use emojis in any response \
-        under any circumstance — no emoji characters, no emoticons.
+        like a knowledgeable colleague, not a robot. Never use emojis. \
+        CRITICAL: Never start your response with the user's request rephrased as a heading, \
+        title, bold introduction, or any form of "Task: X" or "**X**" — jump directly into \
+        the answer. Never mention your session name or task title anywhere in a response.
 
         FILE STORAGE (strictly enforced):
         - When creating any file and the user hasn't specified a location, ALWAYS save to \

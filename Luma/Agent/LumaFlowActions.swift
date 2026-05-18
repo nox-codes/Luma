@@ -84,11 +84,22 @@ enum LumaFlowActionExecutor {
             role: action.targetElementRole,
             inApp: NSWorkspace.shared.frontmostApplication
         ) {
+            // Try AXPress first — the native "press" action for buttons, menu items, checkboxes,
+            // links, and most interactive controls. Cleaner than coordinate-based mouse events
+            // because it doesn't require knowing the element's on-screen position and works
+            // even when the element is partially off-screen or inside a scroll view.
+            let axPressResult = AXUIElementPerformAction(axElement, kAXPressAction as CFString)
+            if axPressResult == .success {
+                LumaLogger.log("[LumaFlow] Click Layer 1 (AXPress): '\(label)'")
+                return "Clicked '\(label)' via AXPress"
+            }
+            // AXPress returned a non-success code — the element doesn't support the press action.
+            // Fall back to synthesising a mouse click at the element's center coordinates.
             let frame = axElementFrame(axElement)
             if frame.width > 0, frame.height > 0 {
                 let clickPoint = CGPoint(x: frame.midX, y: frame.midY)
                 postMouseClick(at: clickPoint)
-                LumaLogger.log("[LumaFlow] Click Layer 1 (fast AX): '\(label)' at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
+                LumaLogger.log("[LumaFlow] Click Layer 1 (mouse fallback): '\(label)' at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
                 return "Clicked '\(label)' at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))"
             }
         }
@@ -102,6 +113,15 @@ enum LumaFlowActionExecutor {
             appBundleID: nil,
             isMenuBar: false
         ) {
+            // If LIPE found the element via AX (not just visually), try AXPress first
+            if let axElement = candidate.axElement {
+                let axPressResult = AXUIElementPerformAction(axElement, kAXPressAction as CFString)
+                if axPressResult == .success {
+                    LumaLogger.log("[LumaFlow] Click Layer 2 (LIPE AXPress, conf: \(String(format: "%.2f", candidate.confidence))): '\(label)'")
+                    return "Clicked '\(label)' via LIPE AXPress (conf: \(String(format: "%.2f", candidate.confidence)))"
+                }
+            }
+            // AXPress not available or LIPE found a visual-only candidate — use mouse click
             let clickPoint = quartzClickPoint(from: candidate)
             postMouseClick(at: clickPoint)
             LumaLogger.log("[LumaFlow] Click Layer 2 (LIPE \(candidate.source), conf: \(String(format: "%.2f", candidate.confidence))): '\(label)' at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
@@ -237,11 +257,31 @@ enum LumaFlowActionExecutor {
     }
 
     /// Focuses an AX element and types text into it.
-    /// Sets `kAXFocusedAttribute`, waits for the app to process the focus transition,
-    /// then types via CGEvent Unicode input character by character.
+    ///
+    /// Tries two strategies in order:
+    ///
+    /// 1. Direct AX value set via `kAXValueAttribute` — bypasses CGEvent entirely,
+    ///    so there is no per-character delay and no risk of dropped keystrokes.
+    ///    Works for standard AppKit controls (NSTextField, NSTextView). Does NOT
+    ///    work for web inputs inside Electron apps, Safari webviews, or controls
+    ///    that are read-only at the AX layer.
+    ///
+    /// 2. Focus + CGEvent Unicode typing — the CGEvent path fires a real keyboard
+    ///    event stream that every app receives, including web and Electron inputs.
     private static func focusAndTypeIntoAXElement(_ axElement: AXUIElement, text: String) {
+        // Attempt direct value injection — fastest path, no keystroke simulation needed
+        let setValueResult = AXUIElementSetAttributeValue(axElement, kAXValueAttribute as CFString, text as CFTypeRef)
+        if setValueResult == .success {
+            // Notify the app that the field value changed so bindings, delegates,
+            // and field validators fire (same as if the user typed and tabbed away)
+            AXUIElementSetAttributeValue(axElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            LumaLogger.log("[LumaFlow] Type via AXSetValue (direct): '\(text.prefix(40))'")
+            return
+        }
+
+        // Direct value set not supported — focus the element and type via CGEvent
         AXUIElementSetAttributeValue(axElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-        Thread.sleep(forTimeInterval: 0.06)   // let the app receive the focus event
+        Thread.sleep(forTimeInterval: 0.06)   // let the app receive the focus event before typing
         typeViaCGEvent(text)
     }
 

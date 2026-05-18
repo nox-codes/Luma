@@ -21,35 +21,146 @@ struct OnboardingWizardView: View {
 
     /// Which of the 5 steps (0–4) is currently visible.
     @State private var currentStep: Int = 0
+    /// Direction of the last navigation — drives the slide transition edge.
+    /// Forward navigation slides new content in from the trailing edge;
+    /// backward navigation slides it in from the leading edge.
+    @State private var isNavigatingForward: Bool = true
 
     var body: some View {
-        ZStack {
-            // Full-screen white background
-            LumaTheme.Colors.background
-                .ignoresSafeArea()
+        HStack(spacing: 0) {
+            // Left sidebar — step navigation matching the settings window sidebar pattern.
+            // Shows which steps are done (green check), active (blue circle), or future (dim).
+            onboardingSidebarView
 
+            // Vertical separator — same border token used throughout the app.
+            Rectangle()
+                .fill(Color(hex: "#2E322E"))
+                .frame(width: 1)
+
+            // Right content area: step view fills available height, bottom nav below it.
             VStack(spacing: 0) {
-                // Main step content area — fills available space above the nav row
                 stepContentView
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Bottom navigation: back button + progress dots
-                bottomNavigationRow
-                    .padding(.top, LumaTheme.Spacing.xl)
-                    .padding(.bottom, LumaTheme.Spacing.xl)
+                // Bottom nav: back + step counter. Only visible on middle steps (not welcome or done).
+                if currentStep > 0 && currentStep < 4 {
+                    bottomNavigationRow
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(hex: "#0E0F0E"))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 680, minHeight: 480)
+        .background(Color(hex: "#141614"))
         .focusEffectDisabled()
+    }
+
+    // MARK: - Sidebar
+
+    /// Left sidebar with step indicators mirroring the HTML OnboardingWizard design.
+    /// Each step shows a circle (done=green check, active=blue number, future=dim number),
+    /// a label, and a highlight row for the active step.
+    private var onboardingSidebarView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // App name header
+            Text("Luma")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(Color(hex: "#ECEEED"))
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
+
+            // Step list
+            VStack(spacing: 2) {
+                ForEach(Array(onboardingStepNames.enumerated()), id: \.offset) { stepIndex, stepName in
+                    onboardingSidebarStepRow(stepIndex: stepIndex, stepName: stepName)
+                }
+            }
+            .padding(.horizontal, 8)
+
+            Spacer()
+
+            // Version footer
+            Text("Built by Nox")
+                .font(.system(size: 11))
+                .foregroundColor(Color(hex: "#555D58"))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+        }
+        .frame(width: 200)
+        .background(Color(hex: "#141614"))
+    }
+
+    /// Human-readable sidebar step names — one per wizard step (indices 0–4).
+    private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Done"]
+
+    /// Renders a single sidebar step row with the correct visual state.
+    private func onboardingSidebarStepRow(stepIndex: Int, stepName: String) -> some View {
+        let isStepDone = stepIndex < currentStep
+        let isStepActive = stepIndex == currentStep
+        let isStepFuture = stepIndex > currentStep
+
+        return HStack(spacing: 10) {
+            // Indicator circle: green + check when done, blue + number when active, dim when future.
+            ZStack {
+                Circle()
+                    .fill(isStepDone
+                          ? Color(hex: "#34D399")
+                          : isStepActive ? Color(hex: "#2563EB") : Color(hex: "#282B28"))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                isStepDone ? Color(hex: "#34D399")
+                                           : isStepActive ? Color(hex: "#1D4ED8") : Color(hex: "#3A3F3A"),
+                                lineWidth: 1
+                            )
+                    )
+
+                if isStepDone {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                } else {
+                    Text("\(stepIndex + 1)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(isStepActive ? .white : Color(hex: "#555D58"))
+                }
+            }
+
+            Text(stepName)
+                .font(.system(size: 12, weight: isStepActive ? .semibold : .regular))
+                .foregroundColor(
+                    isStepDone   ? Color(hex: "#9BA39D") :
+                    isStepActive ? Color(hex: "#ECEEED") :
+                                   Color(hex: "#555D58")
+                )
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isStepActive ? Color(hex: "#2563EB").opacity(0.12) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .opacity(isStepFuture ? 0.35 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: currentStep)
     }
 
     // MARK: - Step Content Router
 
     /// Renders the correct step view based on `currentStep`.
-    /// Uses `.id(currentStep)` on the outer container so SwiftUI creates a fresh view
-    /// whenever the step changes, ensuring entrance animations fire correctly.
+    /// Uses `.id(currentStep)` so SwiftUI replaces the entire view on step change,
+    /// firing the entrance animation. Direction is captured from `isNavigatingForward`:
+    /// forward steps slide in from the trailing edge; back steps from the leading edge.
     @ViewBuilder
     private var stepContentView: some View {
+        // Compute edge offsets before entering the ViewBuilder group so they're
+        // available at the time SwiftUI evaluates the transition closure.
+        let insertionOffset: CGFloat = isNavigatingForward ? 40 : -40
+        let removalOffset: CGFloat = isNavigatingForward ? -40 : 40
+
         Group {
             switch currentStep {
             case 0:
@@ -68,39 +179,48 @@ struct OnboardingWizardView: View {
             }
         }
         .id(currentStep)
-        .transition(.opacity)
-        .animation(.easeInOut(duration: LumaTheme.Animation.standard), value: currentStep)
+        .transition(.asymmetric(
+            insertion: .offset(x: insertionOffset).combined(with: .opacity),
+            removal:   .offset(x: removalOffset).combined(with: .opacity)
+        ))
+        .animation(.spring(response: 0.40, dampingFraction: 0.86), value: currentStep)
     }
 
     // MARK: - Bottom Navigation Row
 
-    /// Shows a back button on the left and progress dots centered below the content.
-    /// Back is hidden on step 0 (welcome) and step 4 (done) — no going back from those.
+    /// Bottom bar shown only on middle steps (1–3): back button on the left,
+    /// step counter on the right. Styled to match the HTML design's border-top separator.
     private var bottomNavigationRow: some View {
-        ZStack {
-            // Progress dots are always centered regardless of whether back is shown
-            progressDotsView
+        HStack {
+            backButton
 
-            // Back button floats to the left only on middle steps
-            if currentStep > 0 && currentStep < 4 {
-                HStack {
-                    backButton
-                    Spacer()
-                }
-            }
+            Spacer()
+
+            // Step counter — "Step N of 3" where N is the current middle step (1–3)
+            Text("Step \(currentStep) of 3")
+                .font(.system(size: 11))
+                .foregroundColor(Color(hex: "#555D58"))
         }
-        .padding(.horizontal, LumaTheme.Spacing.xl)
+        .padding(.horizontal, 48)
+        .padding(.vertical, 14)
+        .background(Color(hex: "#0E0F0E"))
+        .overlay(
+            Rectangle()
+                .fill(Color(hex: "#2E322E"))
+                .frame(height: 1),
+            alignment: .top
+        )
     }
 
     private var backButton: some View {
         Button(action: goBackToPreviousStep) {
-            HStack(spacing: LumaTheme.Spacing.xs) {
+            HStack(spacing: 6) {
                 Image(systemName: "arrow.left")
-                    .font(LumaTheme.Typography.bodyMedium)
+                    .font(.system(size: 12, weight: .medium))
                 Text("Back")
-                    .font(LumaTheme.Typography.body)
+                    .font(.system(size: 12))
             }
-            .foregroundColor(LumaTheme.Colors.secondaryText)
+            .foregroundColor(Color(hex: "#9BA39D"))
         }
         .buttonStyle(.plain)
         .onHover { isHovering in
@@ -108,40 +228,34 @@ struct OnboardingWizardView: View {
         }
     }
 
-    private var progressDotsView: some View {
-        HStack(spacing: LumaTheme.Spacing.sm) {
-            ForEach(0..<5, id: \.self) { dotIndex in
-                Circle()
-                    .fill(dotIndex <= currentStep
-                          ? LumaTheme.Colors.accent
-                          : LumaTheme.Colors.tertiaryText)
-                    .frame(width: 7, height: 7)
-            }
-        }
-    }
-
     // MARK: - Navigation Actions
 
     private func advanceToNextStep() {
-        withAnimation(.easeInOut(duration: LumaTheme.Animation.standard)) {
+        // Set direction before the step changes so the transition captures the correct edge.
+        isNavigatingForward = true
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.86)) {
             currentStep += 1
         }
     }
 
     private func goBackToPreviousStep() {
-        withAnimation(.easeInOut(duration: LumaTheme.Animation.standard)) {
+        isNavigatingForward = false
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.86)) {
             currentStep -= 1
         }
     }
 
     /// Called on the final step. Persists the completion flag, requests accessibility
-    /// permission (deferred from launch so it doesn't clash with onboarding), then dismisses.
+    /// permission (deferred from launch so it doesn't clash with onboarding), then closes
+    /// the dedicated onboarding window via LumaOnboardingWindowManager.
     private func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
         hasCompletedOnboarding = true
         // Now that setup is complete, ask for accessibility. Doing this here instead of
         // at app launch prevents the permission dialog from appearing over the onboarding wizard.
         AccessibilityWatcher.shared.checkAndRequestPermission()
+        // Close the onboarding window now that setup is finished.
+        LumaOnboardingWindowManager.shared.hideOnboardingWindow()
     }
 }
 
@@ -154,13 +268,14 @@ private struct OnboardingWelcomeStep: View {
     let onGetStarted: () -> Void
 
     var body: some View {
-        VStack(spacing: LumaTheme.Spacing.xl) {
+        VStack(spacing: 0) {
             Spacer()
 
             // Luma lightbulb icon — same symbol used in the menu bar
             Image(systemName: LumaTheme.MenuBar.iconName)
                 .font(.system(size: 72))
                 .foregroundColor(LumaTheme.Colors.accent)
+                .padding(.bottom, 32)
 
             VStack(spacing: LumaTheme.Spacing.md) {
                 Text(LumaStrings.App.tagline)
@@ -180,9 +295,10 @@ private struct OnboardingWelcomeStep: View {
                 label: "\(LumaStrings.Onboarding.getStarted) →",
                 action: onGetStarted
             )
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, LumaTheme.Spacing.xxl)
-        .frame(maxWidth: 480)
+        .padding(.horizontal, 56)
+        .frame(maxWidth: 520)
         .frame(maxWidth: .infinity)
     }
 }
@@ -205,7 +321,7 @@ private struct OnboardingAccountCreationStep: View {
     @State private var isSavingAccount: Bool = false
 
     var body: some View {
-        VStack(spacing: LumaTheme.Spacing.xl) {
+        VStack(spacing: 0) {
             Spacer()
 
             VStack(spacing: LumaTheme.Spacing.md) {
@@ -214,6 +330,7 @@ private struct OnboardingAccountCreationStep: View {
                     .foregroundColor(LumaTheme.Colors.primaryText)
                     .multilineTextAlignment(.center)
             }
+            .padding(.bottom, 32)
 
             VStack(spacing: LumaTheme.Spacing.lg) {
                 // Username field — lowercase, no spaces
@@ -268,9 +385,10 @@ private struct OnboardingAccountCreationStep: View {
                 isLoading: isSavingAccount,
                 action: handleContinueTapped
             )
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, LumaTheme.Spacing.xxl)
-        .frame(maxWidth: 480)
+        .padding(.horizontal, 56)
+        .frame(maxWidth: 520)
         .frame(maxWidth: .infinity)
     }
 
@@ -334,7 +452,7 @@ private struct OnboardingPINSetupStep: View {
     }
 
     private var pinSetupBaseContent: some View {
-        VStack(spacing: LumaTheme.Spacing.xl) {
+        VStack(spacing: 0) {
             Spacer()
 
             VStack(spacing: LumaTheme.Spacing.md) {
@@ -361,9 +479,10 @@ private struct OnboardingPINSetupStep: View {
                     onPINStepComplete()
                 }
             }
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, LumaTheme.Spacing.xxl)
-        .frame(maxWidth: 480)
+        .padding(.horizontal, 56)
+        .frame(maxWidth: 520)
         .frame(maxWidth: .infinity)
     }
 
@@ -484,10 +603,10 @@ private struct OnboardingAPIProfileStep: View {
                     isLoading: isSavingProfile,
                     action: handleContinueTapped
                 )
-                .padding(.bottom, 48)
+                .padding(.bottom, 56)
             }
-            .padding(.horizontal, LumaTheme.Spacing.xxl)
-            .frame(maxWidth: 480)
+            .padding(.horizontal, 56)
+            .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
         // Reset connection test whenever provider or key changes so the status isn't stale
@@ -731,7 +850,7 @@ private struct OnboardingDoneStep: View {
     @State private var checkmarkOpacityAmount: Double = 0.0
 
     var body: some View {
-        VStack(spacing: LumaTheme.Spacing.xl) {
+        VStack(spacing: 0) {
             Spacer()
 
             // Animated green checkmark — scale-in on appear for a satisfying completion feel
@@ -740,6 +859,7 @@ private struct OnboardingDoneStep: View {
                 .foregroundColor(LumaTheme.Colors.success)
                 .scaleEffect(checkmarkScaleAmount)
                 .opacity(checkmarkOpacityAmount)
+                .padding(.bottom, 32)
                 .onAppear {
                     // Animate from small/invisible to full size over 0.4s
                     withAnimation(.spring(response: LumaTheme.Animation.slow, dampingFraction: 0.6)) {
@@ -766,9 +886,10 @@ private struct OnboardingDoneStep: View {
                 label: LumaStrings.Onboarding.startLearning,
                 action: onStartLearning
             )
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, LumaTheme.Spacing.xxl)
-        .frame(maxWidth: 480)
+        .padding(.horizontal, 56)
+        .frame(maxWidth: 520)
         .frame(maxWidth: .infinity)
     }
 }

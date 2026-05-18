@@ -15,39 +15,39 @@ struct LumaTheme {
 
     // MARK: Backgrounds
 
-    static let background      = Color(hex: "#0A0A0F")
-    static let surface         = Color(hex: "#141414")
-    static let surfaceElevated = Color(hex: "#1C1C1C")
+    static let background      = Color(hex: "#0E0F0E")   // bg
+    static let surface         = Color(hex: "#141614")   // surface1 — cards
+    static let surfaceElevated = Color(hex: "#1A1C1A")   // surface2 — sidebar, titlebar
 
     // MARK: Borders
 
-    static let border      = Color(hex: "#3A3A3A")
-    static let borderFocus = Color(hex: "#FFFFFF")
+    static let border      = Color(hex: "#2E322E")   // dividers, card borders
+    static let borderFocus = Color(hex: "#3A3F3A")   // focused / hover borders
 
     // MARK: Text
 
-    static let textPrimary     = Color(hex: "#FFFFFF")
-    static let textSecondary   = Color(hex: "#B0B0B0")
-    static let textPlaceholder = Color(hex: "#656565")
+    static let textPrimary     = Color(hex: "#ECEEED")   // text1
+    static let textSecondary   = Color(hex: "#9BA39D")   // text2 — labels
+    static let textPlaceholder = Color(hex: "#555D58")   // text3 — placeholder
 
     // MARK: Accent
 
-    /// Primary accent — white on dark background.
-    static let accent           = Color(hex: "#FFFFFF")
-    /// Foreground drawn on top of accent-colored buttons (e.g. black text on white button).
-    static let accentForeground = Color(hex: "#000000")
+    /// Primary accent — blue #2563EB matching the design spec.
+    static let accent           = Color(hex: "#2563EB")
+    /// Foreground drawn on top of accent-colored buttons (white text on blue).
+    static let accentForeground = Color(hex: "#FFFFFF")
 
     // MARK: Semantic
 
-    static let destructive = Color(hex: "#FF3B30")
-    static let success     = Color(hex: "#34C759")
-    static let warning     = Color(hex: "#FF9500")
+    static let destructive = Color(hex: "#E5484D")   // error
+    static let success     = Color(hex: "#34D399")
+    static let warning     = Color(hex: "#FFB224")
 
     // MARK: Input
 
-    static let inputBackground = Color(hex: "#1C1C1C")
-    static let inputBorder     = Color(hex: "#2A2A2A")
-    static let inputText       = Color(hex: "#FFFFFF")
+    static let inputBackground = Color(hex: "#212421")   // surface3 — input fields
+    static let inputBorder     = Color(hex: "#2E322E")
+    static let inputText       = Color(hex: "#ECEEED")
 
     // MARK: - Companion Appearance
     //

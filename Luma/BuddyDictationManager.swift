@@ -260,7 +260,9 @@ final class BuddyDictationManager: NSObject, ObservableObject {
     }
 
     private let transcriptionProvider: any BuddyTranscriptionProvider
-    private let audioEngine = AVAudioEngine()
+    /// Nil at idle — created fresh on each PTT press and released on stop so the
+    /// audio hardware is fully relinquished between recording sessions.
+    private var audioEngine: AVAudioEngine?
     private var activeTranscriptionSession: (any BuddyStreamingTranscriptionSession)?
     private var activeStartSource: BuddyDictationStartSource?
     private var draftCallbacks: BuddyDictationDraftCallbacks?
@@ -339,8 +341,7 @@ final class BuddyDictationManager: NSObject, ObservableObject {
             draftCallbacks?.updateDraftText(currentDraftText)
         }
 
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        stopAudioEngineAndRemoveTap()
         activeTranscriptionSession?.cancel()
 
         resetSessionState()
@@ -448,8 +449,7 @@ final class BuddyDictationManager: NSObject, ObservableObject {
             try await startRecognitionSession()
             guard !Task.isCancelled else {
                 LumaLogger.log("🎙️ BuddyDictationManager: start cancelled (shortcut released during session start)")
-                audioEngine.stop()
-                audioEngine.inputNode.removeTap(onBus: 0)
+                stopAudioEngineAndRemoveTap()
                 activeTranscriptionSession?.cancel()
                 resetSessionState()
                 return
@@ -488,8 +488,7 @@ final class BuddyDictationManager: NSObject, ObservableObject {
         let finalTranscriptFallbackDelaySeconds = activeTranscriptionSession?.finalTranscriptFallbackDelaySeconds
             ?? Self.defaultFinalTranscriptFallbackDelaySeconds
 
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        stopAudioEngineAndRemoveTap()
         activeTranscriptionSession?.requestFinalTranscript()
 
         finalizeFallbackWorkItem?.cancel()
@@ -544,17 +543,26 @@ final class BuddyDictationManager: NSObject, ObservableObject {
         )
         LumaLogger.log("🎙️ BuddyDictationManager: provider ready, starting audio engine")
 
-        let inputNode = audioEngine.inputNode
+        // Create a fresh AVAudioEngine for this session. Reusing the same engine
+        // across sessions keeps the audio hardware active even between PTT presses —
+        // a new instance lets the OS fully reclaim the hardware resource at idle.
+        let freshAudioEngine = AVAudioEngine()
+        audioEngine = freshAudioEngine
+
+        let inputNode = freshAudioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            // Guard against the zero-byte buffer that the IO work loop delivers
+            // in the final callback after audioEngine.stop() is called.
+            guard buffer.frameLength > 0 else { return }
             self?.activeTranscriptionSession?.appendAudioBuffer(buffer)
             self?.updateAudioPowerLevel(from: buffer)
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        freshAudioEngine.prepare()
+        try freshAudioEngine.start()
     }
 
     private func handleRecognitionError(_ error: Error) {
@@ -591,8 +599,7 @@ final class BuddyDictationManager: NSObject, ObservableObject {
             currentDraftCallbacks?.updateDraftText(finalDraftText)
         }
 
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        stopAudioEngineAndRemoveTap()
         activeTranscriptionSession?.cancel()
 
         resetSessionState()
@@ -645,6 +652,21 @@ final class BuddyDictationManager: NSObject, ObservableObject {
         )
         microphoneButtonRecordingStartedAt = nil
         lastRecordedAudioPowerSampleDate = .distantPast
+    }
+
+    /// Stops the audio engine in the correct order to prevent IOWorkLoop overload errors.
+    /// removeTap MUST come before stop — calling stop first causes the IO work loop to fire
+    /// one final callback with a zero-byte buffer, producing:
+    ///   HALC_ProxyIOContext::IOWorkLoop: skipping cycle due to overload
+    ///   AVAudioBuffer.mm: mBuffers[0].mDataByteSize (0) should be non-zero
+    /// Nilling the engine after reset() fully releases the audio hardware so the OS can
+    /// reclaim it between PTT sessions rather than keeping it warm at idle.
+    private func stopAudioEngineAndRemoveTap() {
+        guard let engine = audioEngine else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        engine.reset()
+        audioEngine = nil
     }
 
     private func buildTranscriptionKeyterms() -> [String] {
@@ -700,6 +722,10 @@ final class BuddyDictationManager: NSObject, ObservableObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // Guard against stale callbacks that arrive after the session has been
+            // torn down. resetSessionState() zeroes currentAudioPowerLevel — without
+            // this check a queued async block would write a non-zero value back.
+            guard self.isActivelyRecordingAudio else { return }
 
             let smoothedAudioPowerLevel = max(
                 CGFloat(boostedLevel),

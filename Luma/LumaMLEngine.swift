@@ -128,12 +128,12 @@ final class LumaMLEngine {
             return
         }
 
-        // Attempt to load MobileNetV2. If the model is absent, pass through immediately
-        // so the cursor can still move — coordinate validation is a second layer, not a gate.
-        guard let modelURL = Bundle.main.url(forResource: "MobileNetV2", withExtension: "mlmodelc")
-                ?? Bundle.main.url(forResource: "MobileNetV2", withExtension: "mlmodel"),
-              let coreMLModel = try? MLModel(contentsOf: modelURL),
-              let vnCoreMLModel = try? VNCoreMLModel(for: coreMLModel) else {
+        // Reuse the VNCoreMLModel already loaded by LumaMobileNetDetector's singleton init.
+        // Loading MLModel(contentsOf:) on every call compiles the model from disk each time —
+        // an expensive operation that was causing repeated "MobileNetV2 loaded" log entries
+        // and significant energy impact. The shared detector loads it exactly once at startup.
+        guard LumaMobileNetDetector.shared.isModelAvailable,
+              let vnCoreMLModel = LumaMobileNetDetector.shared.sharedVNCoreMLModel else {
             // Model not bundled — pass through and let the AX API make the final call.
             completion(CoordinateValidationResult(x: x, y: y, confidence: 1.0, passed: true))
             return
