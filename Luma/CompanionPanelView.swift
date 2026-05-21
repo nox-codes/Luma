@@ -7,7 +7,6 @@
 //  like Loom's recording panel — dark, rounded, minimal, and special.
 //
 
-import AVFoundation
 import SwiftUI
 
 
@@ -112,14 +111,6 @@ struct CompanionPanelView: View {
                     )
                     .padding(.horizontal, DS.Spacing.lg)
                 }
-            }
-
-            if !companionManager.allPermissionsGranted {
-                Spacer()
-                    .frame(height: 16)
-
-                settingsSection
-                    .padding(.horizontal, DS.Spacing.lg)
             }
 
             if !companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
@@ -252,63 +243,16 @@ struct CompanionPanelView: View {
 
     @ViewBuilder
     private var permissionsCopySection: some View {
-        if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            if companionManager.showTextInputFallback {
-                Text("Voice unavailable — type below instead.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text("Hold Control+Option to talk.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        } else if companionManager.allPermissionsGranted && !companionManager.hasSubmittedEmail {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Drop your email to get started.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-                Text("If I keep building this, I'll keep you in the loop.")
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.textTertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else if companionManager.allPermissionsGranted {
-            Text("You're all set. Hit Start to meet Luma.")
+        if companionManager.showTextInputFallback {
+            Text("Voice unavailable — type below instead.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else if companionManager.hasCompletedOnboarding {
-            // Permissions were revoked after onboarding — tell user to re-grant
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Permissions needed")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(DS.Colors.textSecondary)
-
-                Text("Some permissions were revoked. Grant all four below to keep using Luma.")
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Hi, I'm Omoju Oluwamayowa. This is Luma.")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(DS.Colors.textSecondary)
-
-                Text("A side project I made for fun to help me learn stuff as I use my computer.")
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("Nothing runs in the background. Luma will only take a screenshot when you press the hot key. So, you can give that permission in peace. If you are still sus, eh, I can't do much there champ.")
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.destructive)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Hold Control+Option to talk.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -720,200 +664,6 @@ struct CompanionPanelView: View {
             }
         }
     }
-
-    // MARK: - Permissions
-
-    private var settingsSection: some View {
-        VStack(spacing: 0) {
-            permissionsHeroSection
-
-            Rectangle()
-                .fill(DS.Colors.borderSubtle)
-                .frame(height: 1)
-                .padding(.bottom, 4)
-
-            permissionItemRow(
-                label: "Microphone",
-                subtitle: "Used only when you press Ctrl+Option",
-                iconName: "mic",
-                iconColor: Color(hex: "#3B82F6"),
-                isGranted: companionManager.hasMicrophonePermission,
-                grantAction: { grantMicrophonePermission() }
-            )
-
-            permissionItemRow(
-                label: "Accessibility",
-                subtitle: "Points at elements on your screen",
-                iconName: "hand.raised",
-                iconColor: Color(hex: "#8B5CF6"),
-                isGranted: companionManager.hasAccessibilityPermission,
-                grantAction: { WindowPositionManager.requestAccessibilityPermission() }
-            )
-
-            permissionItemRow(
-                label: "Screen Recording",
-                subtitle: "Quit and reopen after granting",
-                iconName: "rectangle.dashed.badge.record",
-                iconColor: Color(hex: "#EC4899"),
-                isGranted: companionManager.hasScreenRecordingPermission,
-                grantAction: { WindowPositionManager.requestScreenRecordingPermission() }
-            )
-
-            if companionManager.hasScreenRecordingPermission {
-                permissionItemRow(
-                    label: "Screen Content",
-                    subtitle: "Required for element detection",
-                    iconName: "eye",
-                    iconColor: Color(hex: "#F59E0B"),
-                    isGranted: companionManager.hasScreenContentPermission,
-                    grantAction: { companionManager.requestScreenContentPermission() }
-                )
-            }
-        }
-    }
-
-    /// Hero header for the permissions section: blue bulb icon, title, and animated progress bar.
-    private var permissionsHeroSection: some View {
-        let grantedCount = [
-            companionManager.hasMicrophonePermission,
-            companionManager.hasAccessibilityPermission,
-            companionManager.hasScreenRecordingPermission,
-            // Screen content only counts if screen recording is also granted (it unlocks after)
-            companionManager.hasScreenRecordingPermission && companionManager.hasScreenContentPermission,
-        ].filter { $0 }.count
-        let totalRequired = companionManager.hasScreenRecordingPermission ? 4 : 3
-
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                // Blue gradient bulb icon — same style as HTML PermissionsPanel header
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [Color(hex: "#3380FF"), Color(hex: "#1D4ED8")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 44, height: 44)
-                        .shadow(color: Color(hex: "#2563EB").opacity(0.35), radius: 10, y: 4)
-
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Luma needs access")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(DS.Colors.textPrimary)
-                    Text("Grant permissions to get started")
-                        .font(.system(size: 11))
-                        .foregroundColor(DS.Colors.textTertiary)
-                }
-            }
-
-            // Progress bar: accent → purple gradient, fills based on grant count
-            VStack(alignment: .leading, spacing: 4) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(DS.Colors.surface3)
-                        Capsule()
-                            .fill(LinearGradient(
-                                colors: [DS.Colors.accent, Color(hex: "#8F46EB")],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                            .frame(width: max(0, proxy.size.width * CGFloat(grantedCount) / CGFloat(totalRequired)))
-                            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: grantedCount)
-                    }
-                }
-                .frame(height: 5)
-
-                Text("\(grantedCount) of \(totalRequired) granted")
-                    .font(.system(size: 10))
-                    .foregroundColor(DS.Colors.textTertiary)
-            }
-        }
-        .padding(.bottom, 12)
-    }
-
-    /// Renders a single permission row with a colored icon circle, labels, and a Grant or Granted indicator.
-    private func permissionItemRow(
-        label: String,
-        subtitle: String,
-        iconName: String,
-        iconColor: Color,
-        isGranted: Bool,
-        grantAction: @escaping () -> Void
-    ) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            // Colored icon container — subtle fill + border at the permission's accent color
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(iconColor.opacity(0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(iconColor.opacity(0.22), lineWidth: 1)
-                    )
-                    .frame(width: 44, height: 44)
-
-                Image(systemName: iconName)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(isGranted ? iconColor : DS.Colors.textTertiary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(isGranted ? DS.Colors.textPrimary : DS.Colors.textSecondary)
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundColor(DS.Colors.textTertiary)
-            }
-
-            Spacer()
-
-            if isGranted {
-                Text("Granted")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(DS.Colors.success)
-            } else {
-                Button(action: grantAction) {
-                    Text("Grant")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(iconColor))
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-            }
-        }
-        .padding(.vertical, 12)
-        .overlay(
-            Rectangle()
-                .fill(DS.Colors.borderSubtle)
-                .frame(height: 1),
-            alignment: .bottom
-        )
-    }
-
-    /// Requests microphone permission via the native macOS dialog, or opens System Settings if already denied.
-    private func grantMicrophonePermission() {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .notDetermined {
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        } else {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                NSWorkspace.shared.open(url)
-            }
-        }
-    }
-
-
 
     // MARK: - Show Luma Cursor Toggle
 
