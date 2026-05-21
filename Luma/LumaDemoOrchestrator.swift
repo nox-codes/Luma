@@ -118,6 +118,8 @@ final class LumaDemoOrchestrator: ObservableObject {
         var focusedWindowRef: CFTypeRef?
         AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &focusedWindowRef)
         guard let focusedWindowRef else { return [] }
+        // AXUIElement is a CFTypeRef — the unconditional cast is always safe once the
+        // nil check above passes. The conditional cast (as?) triggers a compiler warning.
         let focusedWindow = focusedWindowRef as! AXUIElement
 
         var childrenRef: CFTypeRef?
@@ -159,7 +161,7 @@ final class LumaDemoOrchestrator: ObservableObject {
     private func extractCGRect(from value: CFTypeRef) -> CGRect? {
         var rect = CGRect.zero
         // AX frame values are stored as AXValue (kAXValueCGRectType)
-        let axValue = value as! AXValue
+        guard let axValue = value as? AXValue else { return nil }
         let success = AXValueGetValue(axValue, .cgRect, &rect)
         return success ? rect : nil
     }
