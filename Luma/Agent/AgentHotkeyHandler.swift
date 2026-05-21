@@ -57,34 +57,12 @@ final class AgentHotkeyHandler {
 
     // MARK: - Key Event Handling
 
-    /// Returns true if the event was consumed (matched an agent hotkey).
+    /// Agent spawn hotkeys have been removed. Agents are now spawned exclusively
+    /// by the intent classifier when a task requires one, or by explicit voice
+    /// command ("new agent", "Luma agent"). This method is kept as an empty stub
+    /// so call sites don't need to be removed.
     @discardableResult
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
-        guard let companionManager else { return false }
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        // Ctrl+Cmd+N → Spawn new agent session
-        if flags == [.control, .command] && event.charactersIgnoringModifiers == "n" {
-            companionManager.createAndSelectNewAgentSession()
-            return true
-        }
-
-        // Ctrl+Option+Tab → Cycle to next agent session
-        if flags == [.control, .option] && event.keyCode == 48 { // Tab key
-            companionManager.cycleActiveAgent()
-            return true
-        }
-
-        // Ctrl+Option+1 through Ctrl+Option+9 → Switch to agent at index
-        if flags == [.control, .option],
-           let characters = event.charactersIgnoringModifiers,
-           let digit = characters.first,
-           digit >= "1" && digit <= "9" {
-            let agentIndex = Int(String(digit))! - 1
-            companionManager.switchToAgentAtIndex(agentIndex)
-            return true
-        }
-
         return false
     }
 }

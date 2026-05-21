@@ -561,7 +561,6 @@ final class CompanionManager: ObservableObject {
         persistAllAgentSessions()
 
         // Tear down agent sessions
-        AgentHotkeyHandler.shared.stopMonitoring()
         agentDockManager.hide()
         agentSessionObservationCancellables.removeAll()
         for session in agentSessions {
@@ -1922,15 +1921,8 @@ final class CompanionManager: ObservableObject {
         let runtime = AgentRuntimeManager.shared.createRuntime()
         session.bind(to: runtime)
 
-        let isFirstAgentSession = agentSessions.isEmpty
         agentSessions.append(session)
         activeAgentSessionID = session.id
-
-        // Start hotkey monitoring when the first session is created so the global
-        // keyDown monitors are only active when there is actually something to switch/cycle.
-        if isFirstAgentSession {
-            AgentHotkeyHandler.shared.startMonitoring(companionManager: self)
-        }
 
         // Observe this session's status changes so the dock refreshes automatically
         observeAgentSessionStatus(session)
@@ -1954,12 +1946,6 @@ final class CompanionManager: ObservableObject {
 
         if activeAgentSessionID == id {
             activeAgentSessionID = agentSessions.first?.id
-        }
-
-        // Unregister hotkeys when the last session is dismissed — no sessions means
-        // the switch/cycle/spawn-nth shortcuts have nothing to act on.
-        if agentSessions.isEmpty {
-            AgentHotkeyHandler.shared.stopMonitoring()
         }
 
         updateAgentDock()
