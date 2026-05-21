@@ -81,7 +81,7 @@ struct AgentSummaryBubbleSizePreferenceKey: PreferenceKey {
 
 /// The buddy's behavioral mode. Controls whether it follows the cursor,
 /// is flying toward a detected UI element, or is pointing at an element.
-enum BuddyNavigationMode {
+enum BuddyNavigationMode: Equatable {
     /// Default — buddy follows the mouse cursor with spring animation
     case followingCursor
     /// Buddy is animating toward a detected UI element location
@@ -402,7 +402,6 @@ struct BlueCursorView: View {
         .onDisappear {
             timer?.invalidate()
             navigationAnimationTimer?.invalidate()
-            companionManager.tearDownOnboardingVideo()
         }
         .onChange(of: buddyNavigationMode) { newMode in
             // Morph to triangle when flying to or pointing at a target.
