@@ -1116,11 +1116,14 @@ private struct ModelTabView: View {
 private struct CustomizationTabView: View {
 
     @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.blue.rawValue
+    @StateObject private var floatingStyleManager = FloatingInputStyleManager.shared
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
                 accentThemeSection
+                Divider()
+                floatingInputStyleSection
                 Divider()
                 BubbleAppearanceSectionView()
             }
@@ -1180,6 +1183,140 @@ private struct CustomizationTabView: View {
         .buttonStyle(.plain)
         .onHover { isHovering in
             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    // MARK: Floating Input Style
+
+    private var floatingInputStyleSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Quick Input Style")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            Text("The pill that appears when you double-tap \u{2318} or ^. Changes apply immediately.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+
+            VStack(spacing: 10) {
+                ForEach(FloatingInputStyle.allCases, id: \.rawValue) { style in
+                    floatingStyleRow(style: style)
+                }
+            }
+        }
+    }
+
+    private func floatingStyleRow(style: FloatingInputStyle) -> some View {
+        let isSelected = floatingStyleManager.currentStyle == style
+        return Button {
+            floatingStyleManager.currentStyle = style
+        } label: {
+            HStack(spacing: 14) {
+                // Selection indicator circle
+                ZStack {
+                    Circle()
+                        .stroke(isSelected ? DS.Colors.accent : DS.Colors.textTertiary.opacity(0.4), lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
+                    if isSelected {
+                        Circle()
+                            .fill(DS.Colors.accent)
+                            .frame(width: 10, height: 10)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(style.displayName)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
+                    Text(style.description)
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+
+                Spacer()
+
+                // Mini preview
+                miniPreview(for: style)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? DS.Colors.accentSubtle : DS.Colors.surface2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(isSelected ? DS.Colors.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.15), value: isSelected)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    @ViewBuilder
+    private func miniPreview(for style: FloatingInputStyle) -> some View {
+        let accent = Color(hex: "#4caf50")
+        switch style {
+        case .pillClean:
+            Capsule()
+                .fill(Color(hex: "#141614"))
+                .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
+                .frame(width: 80, height: 20)
+                .overlay(
+                    HStack(spacing: 4) {
+                        Circle().fill(accent).frame(width: 6, height: 6)
+                        RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#555D58")).frame(width: 36, height: 3)
+                    }
+                    .padding(.leading, 8)
+                    , alignment: .leading
+                )
+
+        case .widerCard:
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(hex: "#0E1210"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(
+                            LinearGradient(colors: [accent.opacity(0.6), accent.opacity(0.1)], startPoint: .leading, endPoint: .trailing),
+                            lineWidth: 1
+                        )
+                )
+                .frame(width: 88, height: 22)
+                .overlay(
+                    HStack(spacing: 4) {
+                        Text("\u{2318}\u{2318}")
+                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#555D58"))
+                        Rectangle().fill(Color(hex: "#2E322E")).frame(width: 0.5, height: 10)
+                        RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#555D58")).frame(width: 28, height: 3)
+                    }
+                    .padding(.horizontal, 6)
+                )
+
+        case .cursorAnchored:
+            VStack(spacing: 0) {
+                HStack {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(accent)
+                        .frame(width: 16, height: 5)
+                        .shadow(color: accent.opacity(0.5), radius: 2)
+                    Spacer()
+                }
+                .padding(.leading, 8)
+                UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 6, bottomTrailingRadius: 6, topTrailingRadius: 6, style: .continuous)
+                    .fill(Color(hex: "#141614"))
+                    .overlay(
+                        UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 6, bottomTrailingRadius: 6, topTrailingRadius: 6, style: .continuous)
+                            .stroke(accent.opacity(0.35), lineWidth: 0.5)
+                    )
+                    .frame(width: 88, height: 18)
+            }
+            .frame(width: 88)
         }
     }
 }

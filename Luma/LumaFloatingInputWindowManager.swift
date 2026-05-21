@@ -5,16 +5,19 @@
 //  Manages the floating pill-shaped text input bubble.
 //
 //  Lifecycle:
-//  - showOrRefocus() — spawns the panel at the current cursor position and makes it key.
-//    If already visible, just refocuses the text field.
-//  - The panel follows the mouse at 25 Hz with spring lerp (factor 0.12/tick).
-//  - Following pauses when the text field is focused AND draft.count >= 1.
-//  - Click outside → field loses focus, following stops. Panel stays visible. Draft persists.
-//  - Re-trigger (double-tap) → refocuses, resumes following, existing draft intact.
+//  - showOrRefocus() — spawns at cursor position, makes panel key, auto-focuses field.
+//    If already visible, refocuses without recreating the panel.
+//  - Panel follows the mouse at 25 Hz with spring lerp (0.12 factor).
+//  - Following pauses when the text field is focused AND draft is non-empty.
+//  - Click outside panel → dismissed via global mouse-down monitor.
+//  - ESC key → dismissed via local key-down monitor.
+//  - Re-trigger (double-tap) → refocuses; draft is preserved.
 //  - Send → clears draft, hides panel, routes text through onSendText callback.
+//  - Style changes → panel resizes to match new FloatingInputStyle dimensions.
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -25,26 +28,37 @@ final class LumaFloatingInputWindowManager: NSObject {
     private var panel: NSPanel?
     private var followTimer: DispatchSourceTimer?
 
-    /// Draft text persists between show/hide cycles so the user can pick up where they left off.
+    /// Draft text persists between show/hide cycles.
     private var draft: String = ""
 
-    /// Whether the embedded text field is currently focused. Updated via onFocusChanged callback.
+    /// Whether the embedded text field is currently focused.
     private var isFieldFocused: Bool = false
 
-    /// Callback to send text through the intent pipeline. Set by CompanionManager.
+    /// Callback set by CompanionManager to route text through the intent pipeline.
     var onSendText: ((String) -> Void)?
 
-    private override init() {}
+    // Event monitors — stored so they can be removed on hide/deinit
+    private var outsideClickMonitor: Any?
+    private var escKeyMonitor: Any?
+
+    // Combine subscription to react to style changes
+    private var styleChangeCancellable: AnyCancellable?
+
+    private override init() {
+        super.init()
+        // Observe style changes and resize the live panel if it's visible
+        styleChangeCancellable = FloatingInputStyleManager.shared.$currentStyle
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newStyle in
+                self?.resizePanelIfVisible(to: newStyle)
+            }
+    }
 
     // MARK: - Public API
 
-    /// Shows the floating input bubble at the current cursor position,
-    /// or refocuses it if already visible.
     func showOrRefocus() {
         if let panel, panel.isVisible {
             panel.makeKeyAndOrderFront(nil)
-            // Focus is restored by making the hosting view first responder.
-            // The SwiftUI @FocusState inside LumaFloatingInputView will pick it up.
             panel.makeFirstResponder(panel.contentView)
             startMouseFollowing()
             return
@@ -53,6 +67,7 @@ final class LumaFloatingInputWindowManager: NSObject {
     }
 
     func hide() {
+        removeEventMonitors()
         stopMouseFollowing()
         panel?.orderOut(nil)
     }
@@ -60,6 +75,8 @@ final class LumaFloatingInputWindowManager: NSObject {
     // MARK: - Panel Creation
 
     private func createAndShowPanel() {
+        let currentStyle = FloatingInputStyleManager.shared.currentStyle
+
         let draftBinding = Binding<String>(
             get: { [weak self] in self?.draft ?? "" },
             set: { [weak self] newValue in self?.draft = newValue }
@@ -71,11 +88,14 @@ final class LumaFloatingInputWindowManager: NSObject {
             onFocusChanged: { [weak self] isFocused in self?.isFieldFocused = isFocused }
         )
 
+        let panelWidth = currentStyle.panelWidth
+        let panelHeight = currentStyle.panelHeight
+
         let hostingView = NSHostingView(rootView: content)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 48)
+        hostingView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
 
         let floatingPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 48),
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -84,18 +104,17 @@ final class LumaFloatingInputWindowManager: NSObject {
         floatingPanel.level = .floating
         floatingPanel.isOpaque = false
         floatingPanel.backgroundColor = .clear
-        floatingPanel.hasShadow = false // shadow drawn by SwiftUI
+        floatingPanel.hasShadow = false
         floatingPanel.hidesOnDeactivate = false
         floatingPanel.isExcludedFromWindowsMenu = true
         floatingPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         floatingPanel.contentView = hostingView
 
-        // Position at cursor. The top-left sharp corner sits just below the cursor,
-        // visually anchoring the bubble to the cursor tip.
+        // Position so top-left of panel sits just below the cursor
         let cursorPosition = NSEvent.mouseLocation
         let panelOrigin = NSPoint(
             x: cursorPosition.x,
-            y: cursorPosition.y - CGFloat(hostingView.frame.height) - 8
+            y: cursorPosition.y - panelHeight - 8
         )
         floatingPanel.setFrameOrigin(panelOrigin)
         floatingPanel.makeKeyAndOrderFront(nil)
@@ -103,15 +122,27 @@ final class LumaFloatingInputWindowManager: NSObject {
 
         self.panel = floatingPanel
         startMouseFollowing()
+        installEventMonitors()
+    }
+
+    // MARK: - Panel Resize on Style Change
+
+    private func resizePanelIfVisible(to style: FloatingInputStyle) {
+        guard let panel, panel.isVisible else { return }
+        let newWidth = style.panelWidth
+        let newHeight = style.panelHeight
+        var frame = panel.frame
+        frame.size = CGSize(width: newWidth, height: newHeight)
+        panel.setFrame(frame, display: true, animate: false)
+        if let hostingView = panel.contentView {
+            hostingView.frame = NSRect(x: 0, y: 0, width: newWidth, height: newHeight)
+        }
     }
 
     // MARK: - Mouse Following
 
-    /// 25 Hz timer that lerps the panel origin toward the current cursor position.
-    /// Spring factor 0.12 gives a weightless, slightly-lagging feel.
     private func startMouseFollowing() {
         stopMouseFollowing()
-
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: 1.0 / 25.0)
         timer.setEventHandler { [weak self] in
@@ -131,8 +162,6 @@ final class LumaFloatingInputWindowManager: NSObject {
             stopMouseFollowing()
             return
         }
-
-        // Pause following while the user is actively typing
         if isFieldFocused && !draft.isEmpty { return }
 
         let cursorPosition = NSEvent.mouseLocation
@@ -140,14 +169,52 @@ final class LumaFloatingInputWindowManager: NSObject {
             x: cursorPosition.x,
             y: cursorPosition.y - panel.frame.height - 8
         )
-
         let currentOrigin = panel.frame.origin
         let springFactor: CGFloat = 0.12
-
         let newX = currentOrigin.x + (targetOrigin.x - currentOrigin.x) * springFactor
         let newY = currentOrigin.y + (targetOrigin.y - currentOrigin.y) * springFactor
-
         panel.setFrameOrigin(NSPoint(x: newX, y: newY))
+    }
+
+    // MARK: - Event Monitors
+
+    private func installEventMonitors() {
+        removeEventMonitors()
+
+        // Dismiss on click outside panel bounds
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isVisible else { return }
+            // Use global mouse location in screen coordinates
+            let globalClickPoint = NSEvent.mouseLocation
+            if !panel.frame.contains(globalClickPoint) {
+                Task { @MainActor [weak self] in
+                    self?.hide()
+                }
+            }
+        }
+
+        // Dismiss on Escape
+        escKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // keyCode 53 = Escape
+            if event.keyCode == 53 {
+                Task { @MainActor [weak self] in
+                    self?.hide()
+                }
+                return nil // consume the event
+            }
+            return event
+        }
+    }
+
+    private func removeEventMonitors() {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+        if let monitor = escKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            escKeyMonitor = nil
+        }
     }
 
     // MARK: - Send
@@ -155,7 +222,7 @@ final class LumaFloatingInputWindowManager: NSObject {
     private func handleSend(text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         LumaLogger.log("[FloatingInput] Sending: \(text.prefix(60))")
-        draft = "" // Clear draft on successful send
+        draft = ""
         hide()
         onSendText?(text)
     }
