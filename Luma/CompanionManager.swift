@@ -463,8 +463,19 @@ final class CompanionManager: ObservableObject {
                    let completedSession = self.agentSessions.first(where: { $0.id == completedSessionId }),
                    completedSession.isTransient {
                     // Small delay so the user can read the completion bubble before it disappears.
-                    Task {
+                    Task { [weak self] in
+                        guard let self else { return }
                         try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
+                        // Only dismiss if the session is still completed/failed — if the user
+                        // sent a follow-up prompt during this window, the session may be running
+                        // again. In that case, promote it to persistent so it isn't killed mid-task.
+                        if let sessionToCheck = self.agentSessions.first(where: { $0.id == completedSessionId }) {
+                            if sessionToCheck.status == .running {
+                                sessionToCheck.isTransient = false
+                                LumaLogger.log("[Luma] Transient session promoted to persistent — received follow-up during auto-dismiss window: \(completedSessionId)")
+                                return
+                            }
+                        }
                         await self.dismissAgentSession(id: completedSessionId)
                         LumaLogger.log("[Luma] Auto-dismissed transient agent session: \(completedSessionId)")
                     }
