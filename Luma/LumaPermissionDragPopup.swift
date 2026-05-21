@@ -82,11 +82,11 @@ final class LumaPermissionDragPopupManager {
 final class LumaPermissionDragPopup: NSObject {
 
     private let permission: LumaRequiredPermission
-    private let onDismiss: () -> Void
+    private let onDismiss: @MainActor () -> Void
     private var panel: NSPanel?
     private var grantObserver: NSObjectProtocol?
 
-    init(permission: LumaRequiredPermission, onDismiss: @escaping () -> Void) {
+    init(permission: LumaRequiredPermission, onDismiss: @escaping @MainActor () -> Void) {
         self.permission = permission
         self.onDismiss = onDismiss
     }
@@ -135,6 +135,8 @@ final class LumaPermissionDragPopup: NSObject {
             guard let self,
                   let rawValue = notification.userInfo?["permission"] as? String,
                   rawValue == self.permission.rawValue else { return }
+            // The closure runs on queue: .main but is not @MainActor-isolated in Swift's
+            // type system. Use Task { @MainActor } to call the @MainActor-isolated dismiss().
             Task { @MainActor [weak self] in
                 self?.dismiss()
             }

@@ -94,7 +94,7 @@ struct OnboardingWizardView: View {
         .background(Color(hex: "#141614"))
     }
 
-    /// Human-readable sidebar step names — one per wizard step (indices 0–4).
+    /// Human-readable sidebar step names — one per wizard step (indices 0–6).
     private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Permissions", "Demo", "Done"]
 
     /// Renders a single sidebar step row with the correct visual state.
@@ -201,7 +201,7 @@ struct OnboardingWizardView: View {
 
     // MARK: - Bottom Navigation Row
 
-    /// Bottom bar shown only on middle steps (1–3): back button on the left,
+    /// Bottom bar shown only on middle steps (1–5): back button on the left,
     /// step counter on the right. Styled to match the HTML design's border-top separator.
     private var bottomNavigationRow: some View {
         HStack {
@@ -209,8 +209,9 @@ struct OnboardingWizardView: View {
 
             Spacer()
 
-            // Step counter — "Step N of 3" where N is the current middle step (1–3)
-            Text("Step \(currentStep) of 5")
+            // Step counter — "Step N of 6" where N is the current middle step (1–5).
+            // The wizard has 7 steps total (0–6); welcome (0) and done (6) hide this bar.
+            Text("Step \(currentStep) of 6")
                 .font(.system(size: 11))
                 .foregroundColor(Color(hex: "#555D58"))
         }
@@ -1000,6 +1001,7 @@ private struct OnboardingSecondaryButton: View {
 
 /// Temporary placeholder for the dynamic demo step.
 /// Replaced by OnboardingDemoStep once LumaDemoOrchestrator is implemented (Task 8).
+@MainActor
 private struct OnboardingDemoPlaceholderStep: View {
     var onDemoComplete: () -> Void
 

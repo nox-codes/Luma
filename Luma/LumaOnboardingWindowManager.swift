@@ -21,9 +21,14 @@ final class LumaOnboardingWindowManager {
     private var onboardingWindow: NSWindow?
     private let windowSize = NSSize(width: 760, height: 540)
     private let minimumWindowSize = NSSize(width: 680, height: 480)
-    /// Weak reference to the running CompanionManager instance.
+    /// Strong reference to the running CompanionManager instance.
     /// Set by the caller before showing the window. Used to inject into OnboardingWizardView.
-    private weak var companionManagerInstance: CompanionManager?
+    /// Not weak: LumaOnboardingWindowManager is a singleton that lives for the app's lifetime,
+    /// and CompanionManager is equally long-lived — a weak reference would require a force-unwrap.
+    private var companionManagerInstance: CompanionManager?
+    /// Observer token for the onboarding window's close notification.
+    /// Stored so it can be removed when the window is released to prevent duplicate observers.
+    private var windowCloseObserver: NSObjectProtocol?
 
     private init() {}
 
@@ -49,7 +54,7 @@ final class LumaOnboardingWindowManager {
         onboardingWindow.makeMain()
 
         // Return to accessory mode (menu-bar-only, no Dock icon) when the window closes.
-        NotificationCenter.default.addObserver(
+        windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: onboardingWindow,
             queue: .main
@@ -63,6 +68,12 @@ final class LumaOnboardingWindowManager {
     /// Programmatically closes the onboarding window.
     /// Called from OnboardingWizardView.completeOnboarding() once the final step is done.
     func hideOnboardingWindow() {
+        // Remove the close observer before releasing the window to prevent it from firing
+        // again if the window is recreated later (e.g. after the user resets the app).
+        if let observer = windowCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            windowCloseObserver = nil
+        }
         onboardingWindow?.orderOut(nil)
         // Release the window reference so it's rebuilt fresh if onboarding is triggered again
         // (e.g. after the user resets the app).
@@ -72,7 +83,15 @@ final class LumaOnboardingWindowManager {
 
     // MARK: - Window Construction
 
-    private func makeOnboardingWindow() -> NSWindow {
+    private func makeOnboardingWindow() -> NSWindow? {
+        // Guard against the window being built before companionManagerInstance is set.
+        // This would be a programmer error — showOnboardingWindow(companionManager:) always
+        // sets companionManagerInstance before calling makeOnboardingWindow().
+        guard let companionManagerForWindow = companionManagerInstance else {
+            LumaLogger.log("[LumaOnboardingWindowManager] companionManagerInstance is nil when building window — this is a programmer error")
+            return nil
+        }
+
         // Binding bridges the SwiftUI wizard's completion back to CompanionManager's published state.
         // CompanionManager has no singleton — read/write UserDefaults directly,
         // which is the exact storage backing hasCompletedOnboarding uses.
@@ -104,7 +123,7 @@ final class LumaOnboardingWindowManager {
         let hostingView = NSHostingView(
             rootView: OnboardingWizardView(
                 hasCompletedOnboarding: completionBinding,
-                companionManager: companionManagerInstance!
+                companionManager: companionManagerForWindow
             )
             .preferredColorScheme(.dark)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
