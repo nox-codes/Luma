@@ -326,6 +326,7 @@ final class CompanionManager: ObservableObject {
             LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
             self.overlayWindowManager.hideOverlay()
             self.isOverlayVisible = false
+            LumaFloatingInputWindowManager.shared.hide()
             NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
         }
 
@@ -673,6 +674,7 @@ final class CompanionManager: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             floatingInputTriggeredObserver = nil
         }
+        LumaFloatingInputWindowManager.shared.hide()
         LumaFloatingInputWindowManager.shared.onSendText = nil
         LumaDoubleTapModifierDetector.shared.stop()
 
@@ -681,6 +683,7 @@ final class CompanionManager: ObservableObject {
         shortcutTransitionCancellable?.cancel()
         voiceStateCancellable?.cancel()
         audioPowerCancellable?.cancel()
+        onboardingCompletedCancellable?.cancel()
         accessibilityCheckTimer?.invalidate()
         accessibilityCheckTimer = nil
 

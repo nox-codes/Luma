@@ -24,7 +24,7 @@ struct OnboardingPermissionsStep: View {
     /// Called when all permissions are granted and the user taps Continue.
     var onAllPermissionsGranted: () -> Void
 
-    private let dragPopupManager = LumaPermissionDragPopupManager()
+    @StateObject private var dragPopupManager = LumaPermissionDragPopupManager()
 
     var allGranted: Bool {
         companionManager.hasScreenRecordingPermission

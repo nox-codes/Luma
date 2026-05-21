@@ -53,8 +53,10 @@ extension Notification.Name {
 
 /// Manages the lifecycle of one popup per permission type.
 /// Ensures only one popup exists per permission even if the user taps "Give" multiple times.
+/// ObservableObject conformance lets OnboardingPermissionsStep hold this as @StateObject,
+/// preserving the single instance across SwiftUI body re-evaluations.
 @MainActor
-final class LumaPermissionDragPopupManager {
+final class LumaPermissionDragPopupManager: ObservableObject {
 
     /// Active popups keyed by permission rawValue so the dictionary works correctly.
     private var activePopups: [String: LumaPermissionDragPopup] = [:]
