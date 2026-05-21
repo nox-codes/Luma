@@ -31,6 +31,10 @@ final class MenuBarPanelManager: NSObject {
     private var panel: NSPanel?
     private var clickOutsideMonitor: Any?
     private var dismissPanelObserver: NSObjectProtocol?
+    /// Timestamp of the last `showPanel()` call. The click-outside monitor ignores
+    /// events within 0.6s of this to prevent the triggering click (or stray launch
+    /// events) from immediately closing the panel.
+    private var panelLastShownAt: Date = .distantPast
 
     private let companionManager: CompanionManager
 
@@ -215,6 +219,15 @@ final class MenuBarPanelManager: NSObject {
     // MARK: - Panel Lifecycle
 
     private func showPanel() {
+        // If the panel is already on screen, just ensure it's key and return.
+        // Without this guard, showPanelOnLaunch()'s delayed call would reset
+        // alphaValue = 0 on an already-visible panel (the "pop in then out" flash).
+        if let panel, panel.isVisible {
+            panel.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        panelLastShownAt = Date()
         // Menu bar icon click counts as an interaction — reset the idle countdown.
         companionManager.idleTimer.reset()
 
@@ -371,36 +384,27 @@ final class MenuBarPanelManager: NSObject {
         ) { [weak self] event in
             guard let self, let panel = self.panel else { return }
 
-            // Check if the click is inside the status item button — if so, the
-            // statusItemClicked handler will toggle the panel, so don't also hide.
             let clickLocation = NSEvent.mouseLocation
-            if panel.frame.contains(clickLocation) {
-                return
+
+            // Clicks anywhere in the menu bar belong to the status item — let
+            // statusItemClicked handle them. The global monitor sees status-item
+            // clicks because the button lives in SystemUIServer (a foreign process).
+            // Filtering by menu-bar height is more reliable than a timestamp gate
+            // because it's unconditional and immune to ordering races.
+            let menuBarThickness = NSStatusBar.system.thickness
+            let isClickInMenuBar = NSScreen.screens.contains { screen in
+                clickLocation.y >= screen.frame.maxY - menuBarThickness
             }
+            if isClickInMenuBar { return }
 
-            // Ignore clicks on the status item button.
-            // Because the status item is owned by SystemUIServer, the global event
-            // monitor sees the same click that triggered statusItemClicked — we must
-            // exclude that area so the panel doesn't open and immediately close.
-            if let statusButton = self.statusItem?.button,
-               let buttonWindow = statusButton.window,
-               buttonWindow.frame.contains(clickLocation) {
-                return
-            }
+            // If the click is inside the panel itself, don't dismiss.
+            if panel.frame.contains(clickLocation) { return }
 
-            // Delay dismissal slightly to avoid closing the panel when
-            // a system permission dialog appears (e.g. microphone access).
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                guard panel.isVisible else { return }
+            // If permissions aren't all granted, a system permission dialog
+            // may have appeared — don't dismiss while the user is mid-onboarding.
+            if !self.companionManager.allPermissionsGranted && !NSApp.isActive { return }
 
-                // If permissions aren't all granted yet, a system dialog
-                // may have focus — don't dismiss during onboarding.
-                if !self.companionManager.allPermissionsGranted && !NSApp.isActive {
-                    return
-                }
-
-                self.hidePanel()
-            }
+            self.hidePanel()
         }
     }
 

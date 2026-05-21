@@ -49,7 +49,18 @@ struct LumaCompletedTask {
 
 @MainActor
 final class CompanionManager: ObservableObject {
-    @Published private(set) var voiceState: CompanionVoiceState = .idle
+    @Published private(set) var voiceState: CompanionVoiceState = .idle {
+        didSet {
+            // Any transition into an active state resets the idle countdown so Luma
+            // never auto-hides in the middle of listening, processing, or responding.
+            switch voiceState {
+            case .listening, .processing, .responding:
+                idleTimer.reset()
+            case .idle:
+                break
+            }
+        }
+    }
     @Published private(set) var lastTranscript: String?
     @Published private(set) var currentAudioPowerLevel: CGFloat = 0
     @Published private(set) var hasAccessibilityPermission = false
@@ -317,7 +328,7 @@ final class CompanionManager: ObservableObject {
                 LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
                 self.overlayWindowManager.hideOverlay()
                 self.isOverlayVisible = false
-                LumaFloatingInputWindowManager.shared.hide()
+                // Floating text input is a separate user-triggered tool — never hidden by the idle timer.
                 NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
             }
         }
@@ -1080,19 +1091,8 @@ final class CompanionManager: ObservableObject {
             return
         }
 
-        // SYSTEM STATE GUARD — if a visual agent session is actively running, forward
-        // the new voice input to it as a follow-up prompt so the agent has full context.
-        // For all other paths (CLI, guide, response), a new request always replaces the
-        // current task: fall through to the classifier and let sendTranscriptToClaudeWithScreenshot
-        // cancel and archive the previous task before starting the new one.
-        if case .executing(let activePath) = systemExecutionState {
-            if case .visualAgent = activePath,
-               let activeSession = agentSessions.first(where: { $0.status == .running || $0.status == .starting }) {
-                LumaLogger.log("[LumaClassifier] Visual agent running — forwarding follow-up to active session")
-                await activeSession.submitPrompt(transcript)
-                return
-            }
-            // CLI / guide / response: fall through so the new request replaces the current task.
+        if case .executing = systemExecutionState {
+            // A new request always replaces the current task: fall through to the classifier.
             LumaLogger.log("[LumaClassifier] New request received — re-classifying to replace current task")
         }
 
@@ -1238,23 +1238,6 @@ final class CompanionManager: ObservableObject {
 
             LumaIntentClassifier.shared.recordExecutedAction("sent to Claude Code: \(command.prefix(60))")
             voiceState = .idle
-
-        case .visualAgent(let goal):
-            // Hand off to LumaFlowEngine which runs the full plan→execute→observe loop.
-            // The engine creates its own AgentSession and drives the dock bubble via
-            // LumaFlowRuntime. This replaces direct AgentVoiceIntegration spawning.
-            LumaLogger.log("[LumaClassifier] → visual_agent → LumaFlowEngine: \(goal.prefix(80))")
-            if !isAgentModeEnabled {
-                isAgentModeEnabled = true
-                UserDefaults.standard.set(true, forKey: "luma.agentMode.enabled")
-            }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await LumaFlowEngine.shared.startFlow(goal: goal, companionManager: self, isTransient: true)
-            }
-            LumaIntentClassifier.shared.recordExecutedAction("started flow for: \(goal.prefix(60))")
-            voiceState = .idle
-            scheduleTransientHideIfNeeded()
 
         case .guide(let topic):
             // Route to the walkthrough / multi-step guide pipeline via existing Claude call.
@@ -1422,10 +1405,21 @@ final class CompanionManager: ObservableObject {
                     conversationHistory: [],  // history is in systemPrompt; not sent as message turns
                     userPrompt: compressedTranscript,
                     maxOutputTokens: isMultiStepRequest ? 2048 : 1024,
-                    onTextChunk: { _ in
-                        // No streaming text display — spinner stays until TTS plays
+                    onTextChunk: { chunk in
+                        // Stream chunks into the floating input panel when it triggered this request.
+                        // FloatingPanelState.isStreaming is only true after the floating input sends —
+                        // voice-triggered requests leave it false so the panel stays unaffected.
+                        // NOTE: chunk is the full accumulated text so far (not just the delta),
+                        // so we assign rather than append.
+                        if FloatingPanelState.shared.isStreaming {
+                            FloatingPanelState.shared.response = chunk
+                        }
                     }
                 )
+
+                // Mark the floating panel response complete so it stops showing the streaming
+                // indicator. Safe to call unconditionally — no-op when voice triggered this.
+                FloatingPanelState.shared.finishResponse()
 
                 // Observe this interaction asynchronously to update the user's behavioral outlook.
                 // Fire-and-forget — never blocks the voice response or TTS playback.
@@ -1454,6 +1448,7 @@ final class CompanionManager: ObservableObject {
                             await nativeTTSClient.waitUntilFinished()
                         }
                         voiceState = .idle
+                        FloatingPanelState.shared.finishResponse()
                         scheduleTransientHideIfNeeded()
                         WalkthroughEngine.shared.executeSteps(extractedSteps)
                         return
@@ -1466,6 +1461,7 @@ final class CompanionManager: ObservableObject {
                     LumaLogger.log("[Luma] Multi-step: no valid <STEPS> block — falling back to TaskPlanner")
                     try? await nativeTTSClient.speakText("Sure, let me guide you through that.")
                     voiceState = .idle
+                    FloatingPanelState.shared.finishResponse()
                     scheduleTransientHideIfNeeded()
                     Task {
                         do {

@@ -18,8 +18,6 @@ import Foundation
 enum LumaExecutionPath: Equatable {
     /// Run a shell command via /bin/zsh — fastest for file ops, git, scripts.
     case cli(command: String)
-    /// Operate a GUI app autonomously via AX + CGEvent (spawn an agent session).
-    case visualAgent(goal: String)
     /// Walk the user through a multi-step process — user executes each step.
     case guide(topic: String)
     /// Answer a question or explain something — no system action needed.
@@ -77,7 +75,6 @@ extension LumaClassifierResult {
     var pathName: String {
         switch path {
         case .cli:         return "cli"
-        case .visualAgent: return "visual_agent"
         case .guide:       return "guide"
         case .response:    return "response"
         }
@@ -286,13 +283,8 @@ final class LumaIntentClassifier {
       explain code, run tests, build projects, git operations, install packages, \
       scripts, terminal commands, file operations). The CLI runtime uses Claude Code \
       which is purpose-built for coding. Opening GUI apps is NOT cli.
-    - visual_agent: use ONLY for GUI automation — clicking UI elements, filling \
-      forms, navigating browsers, cross-app workflows, sending messages in apps, \
-      and opening/launching applications ("open WhatsApp", "launch Safari"). \
-      Do NOT use for anything involving writing or editing code.
     - guide: user explicitly asks how to do something themselves, or the task \
-      requires the user's own credentials/login that Luma must not touch. \
-      Do NOT use guide for simple app launches or automation tasks.
+      requires the user's own credentials/login that Luma must not touch.
     - response: question, explanation, conversation, no action needed
 
     Confidence rules:
@@ -311,7 +303,7 @@ final class LumaIntentClassifier {
     JSON schema:
     {
       "intent": "string — plain english what user wants",
-      "path": "cli | visual_agent | guide | response",
+      "path": "cli | guide | response",
       "pathDetail": "string — specific goal/command/topic/query for that path",
       "confidence": "high | medium | low",
       "requiresConfirmation": boolean,
@@ -346,12 +338,11 @@ final class LumaIntentClassifier {
 
         // Capture a screenshot so the classifier can see what's on screen.
         // Visual context improves routing accuracy — e.g. knowing a browser is open helps
-        // distinguish "search X" (CLI) from "navigate to X" (visual_agent).
+        // the classifier distinguish CLI tasks from guide/response paths.
         let classifierScreenshotData = await ScreenCapture.captureFullScreen()
 
         // Prepend the user's memory and behavioral outlook to the classifier system prompt so
-        // routing decisions account for personal context — e.g. a developer's "run it" maps
-        // to CLI, while a non-technical user's identical phrase likely means visual_agent.
+        // routing decisions account for personal context.
         let enrichedClassifierSystemPrompt: String
         if let contextPrefix = AgentMemoryIntegration.fullSystemContextPrefix() {
             enrichedClassifierSystemPrompt = contextPrefix + "\n\n" + Self.classifierSystemPrompt
@@ -466,7 +457,6 @@ final class LumaIntentClassifier {
         let path: LumaExecutionPath
         switch pathString {
         case "cli":          path = .cli(command: pathDetail)
-        case "visual_agent": path = .visualAgent(goal: pathDetail)
         case "guide":        path = .guide(topic: pathDetail)
         default:             path = .response(query: pathDetail)
         }

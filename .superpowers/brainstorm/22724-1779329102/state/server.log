@@ -1,0 +1,3 @@
+{"type":"server-started","port":50217,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50217","screen_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/22724-1779329102/content","state_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/22724-1779329102/state"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/22724-1779329102/content/floating-input-design.html"}
+{"type":"server-stopped","reason":"idle timeout"}

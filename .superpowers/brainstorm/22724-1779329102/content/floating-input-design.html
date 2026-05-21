@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luma Floating Input — Design Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0b0a;
+    color: #ECEEED;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    padding: 40px 32px 60px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #9BA39D; margin-bottom: 40px; }
+
+  .section { margin-bottom: 48px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: #555D58;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  /* Option card */
+  .option-card {
+    border: 1.5px solid #2E322E;
+    border-radius: 16px;
+    padding: 28px 28px 24px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #111311;
+  }
+  .option-card:hover { border-color: #4caf50; box-shadow: 0 0 0 1px #4caf5033; }
+  .option-card.selected { border-color: #4caf50; box-shadow: 0 0 0 3px #4caf5022; }
+
+  .option-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .option-letter {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: #1E221E; border: 1px solid #2E322E;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #9BA39D; flex-shrink: 0;
+  }
+  .option-card.selected .option-letter { background: #4caf5022; border-color: #4caf5066; color: #4caf50; }
+  .option-name { font-size: 15px; font-weight: 600; }
+  .option-desc { font-size: 12px; color: #9BA39D; margin-top: 2px; }
+
+  /* Preview canvas */
+  .preview {
+    background: #181a18;
+    border-radius: 12px;
+    padding: 32px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    min-height: 90px;
+  }
+
+  /* ── OPTION A: Clean pill, fully rounded, glass tint ── */
+  .pill-a {
+    width: 440px;
+    height: 52px;
+    background: rgba(20,22,20,0.94);
+    border-radius: 999px;
+    border: 1px solid rgba(76,175,80,0.28);
+    box-shadow:
+      0 0 0 3px rgba(76,175,80,0.06),
+      0 8px 32px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 18px;
+    gap: 10px;
+    position: relative;
+  }
+  .pill-a-icon {
+    width: 24px; height: 24px;
+    background: rgba(76,175,80,0.15);
+    border-radius: 50%;
+    border: 1px solid rgba(76,175,80,0.3);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .pill-a-icon::after {
+    content: '';
+    width: 8px; height: 8px;
+    background: #4caf50;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #4caf5099;
+  }
+  .pill-a-text { flex: 1; font-size: 14px; color: #555D58; }
+  .pill-a-send {
+    width: 34px; height: 34px;
+    background: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    opacity: 0.15;
+  }
+  .pill-a-send::after { content: '↑'; color: #141614; font-size: 14px; font-weight: 700; }
+
+  /* ── OPTION B: Wider frosted card, subtle gradient border ── */
+  .pill-b-wrap {
+    position: relative;
+    width: 500px;
+    border-radius: 16px;
+    padding: 1.5px;
+    background: linear-gradient(135deg, rgba(76,175,80,0.35) 0%, rgba(76,175,80,0.05) 50%, rgba(76,175,80,0.15) 100%);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(76,175,80,0.05);
+  }
+  .pill-b {
+    width: 100%;
+    height: 56px;
+    background: rgba(16,18,16,0.97);
+    border-radius: 14.5px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 20px;
+    gap: 12px;
+  }
+  .pill-b-kbd {
+    font-size: 10px;
+    color: #555D58;
+    background: #1a1c1a;
+    border: 1px solid #2E322E;
+    border-radius: 5px;
+    padding: 2px 5px;
+    flex-shrink: 0;
+    font-family: 'SF Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+  .pill-b-divider { width: 1px; height: 20px; background: #2E322E; flex-shrink: 0; }
+  .pill-b-text { flex: 1; font-size: 14px; color: #555D58; }
+  .pill-b-send {
+    width: 36px; height: 36px;
+    background: #4caf50;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.2;
+    flex-shrink: 0;
+  }
+  .pill-b-send::after { content: '↑'; color: #000; font-size: 15px; font-weight: 700; }
+
+  /* ── OPTION C: Glowing orb input, cursor-follows ── */
+  .pill-c-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    width: 420px;
+  }
+  /* Orb tab above */
+  .pill-c-tab {
+    width: 42px; height: 14px;
+    background: rgba(76,175,80,0.9);
+    border-radius: 6px 6px 0 0;
+    display: flex; align-items: center; justify-content: center;
+    margin-left: 16px;
+    box-shadow: 0 -4px 12px rgba(76,175,80,0.4);
+  }
+  .pill-c-tab::after {
+    content: '';
+    width: 14px; height: 3px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 2px;
+  }
+  .pill-c {
+    width: 100%;
+    height: 52px;
+    background: rgba(20,22,20,0.96);
+    border-radius: 0 16px 16px 16px;
+    border: 1px solid rgba(76,175,80,0.3);
+    box-shadow:
+      0 0 0 1px rgba(76,175,80,0.08),
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 40px rgba(76,175,80,0.04);
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 18px;
+    gap: 12px;
+  }
+  .pill-c-text { flex: 1; font-size: 14px; color: #555D58; }
+  .pill-c-hint { font-size: 11px; color: #3A3F3A; flex-shrink: 0; }
+  .pill-c-send {
+    width: 34px; height: 34px;
+    background: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.12;
+    flex-shrink: 0;
+  }
+  .pill-c-send::after { content: '↑'; color: #141614; font-size: 14px; font-weight: 700; }
+
+  /* Spec table */
+  .specs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    font-size: 12px;
+    color: #9BA39D;
+  }
+  .spec-item { background: #1A1C1A; border-radius: 8px; padding: 8px 10px; }
+  .spec-key { color: #555D58; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .spec-val { color: #ECEEED; font-weight: 500; }
+
+  /* Behavior list */
+  .behavior-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .behavior-list li {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; color: #9BA39D;
+  }
+  .behavior-list li::before {
+    content: '·';
+    color: #4caf50;
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .selected-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; color: #4caf50;
+    background: rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.2);
+    border-radius: 99px; padding: 2px 8px;
+    margin-left: auto;
+  }
+</style>
+</head>
+<body>
+
+<h1>Floating Type-to-Luma — Design Options</h1>
+<p class="subtitle">Three polished directions for the ⌘⌘ / ^^ input bubble. Click a card to select.</p>
+
+<!-- OPTION A -->
+<div class="option-card" onclick="selectCard(this, 'A')">
+  <div class="option-header">
+    <div class="option-letter">A</div>
+    <div>
+      <div class="option-name">Clean Pill &nbsp;·&nbsp; Fully rounded, Luma dot indicator</div>
+      <div class="option-desc">440 × 52 pt &nbsp;·&nbsp; All corners 999pt &nbsp;·&nbsp; Green accent dot on left</div>
+    </div>
+    <div class="selected-badge" style="display:none">✓ Selected</div>
+  </div>
+
+  <div class="preview">
+    <div class="pill-a">
+      <div class="pill-a-icon"></div>
+      <div class="pill-a-text">Ask Luma anything…</div>
+      <div class="pill-a-send"></div>
+    </div>
+  </div>
+
+  <div class="specs" style="margin-bottom:14px">
+    <div class="spec-item"><div class="spec-key">Width</div><div class="spec-val">440 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Height</div><div class="spec-val">52 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Corner radius</div><div class="spec-val">999 pt (full pill)</div></div>
+    <div class="spec-item"><div class="spec-key">H-padding</div><div class="spec-val">18 pt left, 10 pt right</div></div>
+    <div class="spec-item"><div class="spec-key">Border</div><div class="spec-val">accent × 0.28</div></div>
+    <div class="spec-item"><div class="spec-key">Send btn</div><div class="spec-val">34 × 34 circle</div></div>
+  </div>
+
+  <ul class="behavior-list">
+    <li>Green orb dot pulses while listening/typing</li>
+    <li>Send button fades in when draft is non-empty</li>
+    <li>Clicking outside hides immediately; ⌘⌘ / ^^ refocuses with draft intact</li>
+    <li>Auto-focus on show — cursor goes straight to field</li>
+  </ul>
+</div>
+
+<!-- OPTION B -->
+<div class="option-card" onclick="selectCard(this, 'B')">
+  <div class="option-header">
+    <div class="option-letter">B</div>
+    <div>
+      <div class="option-name">Wider Frosted Card &nbsp;·&nbsp; Gradient border, keyboard hint</div>
+      <div class="option-desc">500 × 56 pt &nbsp;·&nbsp; Gradient border &nbsp;·&nbsp; ⌘⌘ badge on left</div>
+    </div>
+    <div class="selected-badge" style="display:none">✓ Selected</div>
+  </div>
+
+  <div class="preview">
+    <div class="pill-b-wrap">
+      <div class="pill-b">
+        <div class="pill-b-kbd">⌘⌘</div>
+        <div class="pill-b-divider"></div>
+        <div class="pill-b-text">Ask Luma anything…</div>
+        <div class="pill-b-send"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs" style="margin-bottom:14px">
+    <div class="spec-item"><div class="spec-key">Width</div><div class="spec-val">500 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Height</div><div class="spec-val">56 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Corner radius</div><div class="spec-val">16 pt (card)</div></div>
+    <div class="spec-item"><div class="spec-key">H-padding</div><div class="spec-val">20 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Border</div><div class="spec-val">Gradient 1.5 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Send btn</div><div class="spec-val">36 × 36, 10 pt radius</div></div>
+  </div>
+
+  <ul class="behavior-list">
+    <li>⌘⌘ badge gives users a shortcut reminder without extra text</li>
+    <li>Green rounded-rect send button (matches Luma's accent)</li>
+    <li>Gradient border: #4caf50 → transparent → #4caf50 at 135°</li>
+    <li>Clicking outside hides; re-trigger refocuses</li>
+  </ul>
+</div>
+
+<!-- OPTION C -->
+<div class="option-card" onclick="selectCard(this, 'C')">
+  <div class="option-header">
+    <div class="option-letter">C</div>
+    <div>
+      <div class="option-name">Cursor-Anchored Tab &nbsp;·&nbsp; Green tab above, square top-left</div>
+      <div class="option-desc">420 × 52 pt + 14 pt tab &nbsp;·&nbsp; Anchored visual language &nbsp;·&nbsp; Glow on border</div>
+    </div>
+    <div class="selected-badge" style="display:none">✓ Selected</div>
+  </div>
+
+  <div class="preview">
+    <div class="pill-c-wrap">
+      <div class="pill-c-tab"></div>
+      <div class="pill-c">
+        <div class="pill-c-text">Ask Luma anything…</div>
+        <div class="pill-c-hint">esc to close</div>
+        <div class="pill-c-send"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs" style="margin-bottom:14px">
+    <div class="spec-item"><div class="spec-key">Width</div><div class="spec-val">420 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Input height</div><div class="spec-val">52 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Tab height</div><div class="spec-val">14 pt</div></div>
+    <div class="spec-item"><div class="spec-key">Corner radius</div><div class="spec-val">0 / 16 / 16 / 16</div></div>
+    <div class="spec-item"><div class="spec-key">Border</div><div class="spec-val">accent × 0.3 + glow</div></div>
+    <div class="spec-item"><div class="spec-key">Send btn</div><div class="spec-val">34 × 34 circle</div></div>
+  </div>
+
+  <ul class="behavior-list">
+    <li>Small green tab visually anchors the bubble to the cursor above it</li>
+    <li>Keeps the cursor-attached metaphor from the original design — improved</li>
+    <li>Esc to close hint visible on right</li>
+    <li>Clicking outside hides; re-trigger refocuses</li>
+  </ul>
+</div>
+
+<!-- Shared behavior note -->
+<div class="section">
+  <div class="section-label">All options share these behaviors</div>
+  <ul class="behavior-list">
+    <li><strong>Auto-focus:</strong> Text field is immediately focused when the bubble appears — no extra click needed</li>
+    <li><strong>Dismiss on outside click:</strong> Global mouse-down monitor detects clicks outside the panel bounds and hides it</li>
+    <li><strong>Esc to dismiss:</strong> Pressing Escape hides the panel, preserving the draft</li>
+    <li><strong>Draft persistence:</strong> Typing, clicking away, and re-triggering leaves the previous text intact</li>
+    <li><strong>Mouse following:</strong> Panel springs toward cursor at 25 Hz when not actively typing</li>
+    <li><strong>Send on Enter:</strong> Submits and routes through intent classifier</li>
+  </ul>
+</div>
+
+<script>
+function selectCard(el, choice) {
+  document.querySelectorAll('.option-card').forEach(c => {
+    c.classList.remove('selected');
+    c.querySelector('.selected-badge').style.display = 'none';
+  });
+  el.classList.add('selected');
+  el.querySelector('.selected-badge').style.display = 'inline-flex';
+  if (window.__lumaSelect) window.__lumaSelect(choice, el.querySelector('.option-name').textContent.trim());
+}
+window.addEventListener('DOMContentLoaded', () => {
+  // Wire into visual companion selection system if available
+  if (typeof toggleSelect === 'function') return;
+  window.__lumaSelect = (choice, text) => {
+    try {
+      const ev = { type: 'click', choice, text, timestamp: Date.now() };
+      fetch('/__event', { method: 'POST', body: JSON.stringify(ev) }).catch(() => {});
+    } catch(e) {}
+  };
+});
+</script>
+</body>
+</html>

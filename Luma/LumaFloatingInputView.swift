@@ -2,199 +2,372 @@
 //  LumaFloatingInputView.swift
 //  Luma
 //
-//  Three visual styles for the floating ⌘⌘/^^ text input bubble.
-//  Style is driven by FloatingInputStyleManager.shared.currentStyle so the
-//  window manager can observe it and resize the panel without recreating it.
+//  Three visual styles for the floating text input bubble.
+//  Style is driven by FloatingInputStyleManager.shared.currentStyle.
 //
-//  Focus note: @FocusState is managed locally and synced to onFocusChanged
-//  via onChange because @FocusState.Binding cannot cross an NSHostingView boundary.
+//  All styles use LumaDirectTextField (NSViewRepresentable wrapping NSTextField)
+//  instead of SwiftUI TextField — SwiftUI's .focused() modifier fights AppKit's
+//  makeFirstResponder and silently yanks focus away. Direct NSTextField ownership
+//  means the window manager's makeFirstResponder lands cleanly every time.
+//
+//  The AI response renders inside the same visual container as the input field.
+//  The pill style morphs from a true capsule (cornerRadius 100, compact) to a
+//  rounded rectangle (cornerRadius 26, expanded) as the response slides in.
+//  Card and anchored styles expand downward without morphing corner radius.
+//
+//  Draft text is owned by FloatingPanelState.shared (@Published) so the send
+//  button updates reactively as the user types — no manual binding needed.
 //
 
+import AppKit
 import SwiftUI
 
 struct LumaFloatingInputView: View {
 
-    @Binding var draft: String
     var onSend: (String) -> Void
-    var onFocusChanged: (Bool) -> Void
 
-    @FocusState private var isTextFieldFocused: Bool
     @StateObject private var styleManager = FloatingInputStyleManager.shared
+    @ObservedObject private var panelState = FloatingPanelState.shared
 
     var body: some View {
-        Group {
-            switch styleManager.currentStyle {
-            case .pillClean:
-                PillCleanFloatingInput(
-                    draft: $draft,
-                    isTextFieldFocused: $isTextFieldFocused,
-                    onSend: { sendDraft() }
-                )
-            case .widerCard:
-                WiderCardFloatingInput(
-                    draft: $draft,
-                    isTextFieldFocused: $isTextFieldFocused,
-                    onSend: { sendDraft() }
-                )
-            case .cursorAnchored:
-                CursorAnchoredFloatingInput(
-                    draft: $draft,
-                    isTextFieldFocused: $isTextFieldFocused,
-                    onSend: { sendDraft() }
-                )
-            }
-        }
-        .preferredColorScheme(.dark)
-        .onChange(of: isTextFieldFocused) { newValue in
-            onFocusChanged(newValue)
-        }
-        .onAppear {
-            // 0.15s gives NSApp.activate + makeKeyAndOrderFront time to propagate
-            // before @FocusState fires. 0.05s was too short for the activation path.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                isTextFieldFocused = true
-            }
+        switch styleManager.currentStyle {
+        case .pillClean:
+            PillCleanFloatingInput(onSend: { sendDraft() })
+        case .widerCard:
+            WiderCardFloatingInput(onSend: { sendDraft() })
+        case .cursorAnchored:
+            CursorAnchoredFloatingInput(onSend: { sendDraft() })
         }
     }
 
     private func sendDraft() {
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = panelState.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         onSend(trimmed)
     }
 }
 
-// MARK: - Style A: Clean Pill
+// MARK: - Shared Response Area
 
-/// Fully rounded pill with green orb dot on the left. 440 × 52 pt.
-private struct PillCleanFloatingInput: View {
+/// Renders the streaming AI response below the input row.
+/// Shared by all three style containers. Uses FloatingPanelState.shared.displayResponse
+/// (POINT tags stripped) and shows animated streaming dots while isStreaming is true.
+private struct FloatingResponseArea: View {
 
-    @Binding var draft: String
-    var isTextFieldFocused: FocusState<Bool>.Binding
-    var onSend: () -> Void
+    @ObservedObject private var panelState = FloatingPanelState.shared
 
     var body: some View {
-        HStack(spacing: 10) {
-            // Green orb dot — pulses to indicate Luma is listening
-            ZStack {
-                Circle()
-                    .fill(Color(hex: "#4caf50").opacity(0.18))
-                    .frame(width: 24, height: 24)
-                Circle()
-                    .fill(Color(hex: "#4caf50"))
-                    .frame(width: 8, height: 8)
-                    .shadow(color: Color(hex: "#4caf50").opacity(0.7), radius: 4, x: 0, y: 0)
+        VStack(spacing: 0) {
+            // Thin divider separating input from response
+            Rectangle()
+                .fill(Color(hex: "#2E322E"))
+                .frame(height: 1)
+
+            // 200pt scrollable response region
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        responseContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .id("bottom")
+
+                        // Streaming dots — visible while the AI is still generating
+                        if panelState.isStreaming {
+                            HStack(spacing: 4) {
+                                ForEach(0..<3, id: \.self) { dotIndex in
+                                    StreamingDot(delaySeconds: Double(dotIndex) * 0.2)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        }
+                    }
+                }
+                .frame(height: 200)
+                .onChange(of: panelState.displayResponse) { _ in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
             }
-            .overlay(
-                Circle()
-                    .stroke(Color(hex: "#4caf50").opacity(0.35), lineWidth: 1)
-                    .frame(width: 24, height: 24)
+        }
+        // Total height: 1pt divider + 200pt scroll = 201pt (matches responseAreaHeight in the window manager)
+    }
+
+    @ViewBuilder
+    private var responseContent: some View {
+        // Attempt inline markdown rendering; fall back to plain text on parse failure
+        if let attributed = try? AttributedString(
+            markdown: panelState.displayResponse,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace
             )
+        ) {
+            Text(attributed)
+                .foregroundColor(Color.white.opacity(0.88))
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .textSelection(.enabled)
+        } else {
+            Text(panelState.displayResponse)
+                .foregroundColor(Color.white.opacity(0.88))
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .textSelection(.enabled)
+        }
+    }
+}
 
-            TextField("Ask Luma anything…", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .foregroundColor(.white)
-                .focused(isTextFieldFocused)
-                .tint(.white)
-                .onSubmit { onSend() }
+// Three dots that pulse while the AI is streaming a response
+private struct StreamingDot: View {
+    let delaySeconds: Double
+    @State private var opacity: Double = 0.3
 
-            if !draft.isEmpty {
+    var body: some View {
+        Circle()
+            .fill(Color(hex: "#4caf50"))
+            .frame(width: 5, height: 5)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 0.6)
+                    .repeatForever(autoreverses: true)
+                    .delay(delaySeconds)
+                ) {
+                    opacity = 1.0
+                }
+            }
+    }
+}
+
+// MARK: - AppKit-backed text field
+
+/// NSViewRepresentable wrapping NSTextField directly.
+/// SwiftUI's TextField with .focused() actively fights AppKit's makeFirstResponder —
+/// this bypasses the SwiftUI focus system entirely so keyboard events always arrive.
+struct LumaDirectTextField: NSViewRepresentable {
+
+    @Binding var text: String
+    var placeholder: String
+    var onSubmit: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.placeholderAttributedString = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: NSColor.white.withAlphaComponent(0.4)]
+        )
+        field.isBordered = false
+        field.drawsBackground = false
+        field.textColor = .white
+        field.font = .systemFont(ofSize: 14)
+        field.focusRingType = .none
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        // Only write back if value changed to avoid cursor-jump on every keystroke
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+        context.coordinator.onSubmit = onSubmit
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onSubmit: onSubmit)
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding var text: String
+        var onSubmit: () -> Void
+
+        init(text: Binding<String>, onSubmit: @escaping () -> Void) {
+            self._text = text
+            self.onSubmit = onSubmit
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            text = field.stringValue
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                onSubmit()
+                return true
+            }
+            return false
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            // Set insertion cursor color to white to match the dark theme
+            if let textView = (obj.object as? NSTextField)?.currentEditor() as? NSTextView {
+                textView.insertionPointColor = .white
+            }
+        }
+    }
+}
+
+// MARK: - Style A: Clean Pill
+
+/// Fully rounded pill with green orb dot on the left. 440 × 52 pt input row.
+/// Morphs from a true capsule (cornerRadius 100) when the response area is hidden to a
+/// rounded rectangle (cornerRadius 26) when the response streams in — one unified
+/// background shape that grows downward without changing the input row's appearance.
+private struct PillCleanFloatingInput: View {
+
+    var onSend: () -> Void
+
+    @ObservedObject private var panelState = FloatingPanelState.shared
+
+    /// Morphs between capsule (100) and rounded-rect (26) as the response appears.
+    /// SwiftUI's RoundedRectangle caps the radius at min(width, height)/2 for the
+    /// compact 52pt height, so cornerRadius 100 visually equals a true capsule.
+    private var containerCornerRadius: CGFloat {
+        panelState.response.isEmpty ? 100 : 26
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Input row
+            HStack(spacing: 10) {
+                // Green orb — indicates Luma is ready and listening
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#4caf50").opacity(0.18))
+                        .frame(width: 24, height: 24)
+                    Circle()
+                        .fill(Color(hex: "#4caf50"))
+                        .frame(width: 8, height: 8)
+                        .shadow(color: Color(hex: "#4caf50").opacity(0.7), radius: 4, x: 0, y: 0)
+                }
+                .overlay(
+                    Circle()
+                        .stroke(Color(hex: "#4caf50").opacity(0.35), lineWidth: 1)
+                        .frame(width: 24, height: 24)
+                )
+
+                LumaDirectTextField(
+                    text: $panelState.draft,
+                    placeholder: "Ask Luma anything…",
+                    onSubmit: onSend
+                )
+
+                // Send button — dims when draft is empty, fills solid white when ready
                 Button(action: onSend) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(Color(hex: "#141614"))
-                        .frame(width: 34, height: 34)
-                        .background(Color.white)
+                        .frame(width: 30, height: 30)
+                        .background(panelState.draft.isEmpty ? Color.white.opacity(0.25) : Color.white)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .disabled(panelState.draft.isEmpty)
                 .onHover { isHovering in
-                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if isHovering && !panelState.draft.isEmpty { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
-                .transition(.scale.combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.15), value: panelState.draft.isEmpty)
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 10)
+            .frame(width: 440, height: 52)
+
+            // Response area — slides in below the input inside the same pill container
+            if !panelState.response.isEmpty {
+                FloatingResponseArea()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 10)
-        .frame(width: 440, height: 52)
         .background(
-            Capsule()
+            RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
                 .fill(Color(hex: "#141614"))
                 .shadow(color: Color(hex: "#4caf50").opacity(0.12), radius: 20, x: 0, y: 0)
                 .overlay(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
                         .stroke(Color(hex: "#4caf50").opacity(0.28), lineWidth: 1)
                 )
         )
-        .animation(.easeInOut(duration: 0.15), value: draft.isEmpty)
+        .clipShape(RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous))
+        // Spring animation drives both the shape morph and the response area slide-in
+        .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
+        .preferredColorScheme(.dark)
     }
 }
 
 // MARK: - Style B: Wider Frosted Card
 
-/// Wider frosted card with animated gradient border. 500 × 56 pt.
+/// Wider frosted card with animated gradient border. 500 × 56 pt input row.
+/// The response area expands below the input inside the same rounded-rect container.
 private struct WiderCardFloatingInput: View {
 
-    @Binding var draft: String
-    var isTextFieldFocused: FocusState<Bool>.Binding
     var onSend: () -> Void
 
+    @ObservedObject private var panelState = FloatingPanelState.shared
     @State private var gradientRotation: Double = 0
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Keyboard shortcut badge
-            Text("⌘⌘")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(Color(hex: "#555D58"))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color(hex: "#1A1C1A"))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(Color(hex: "#2E322E"), lineWidth: 1)
-                        )
+        VStack(spacing: 0) {
+            // Input row
+            HStack(spacing: 0) {
+                // Keyboard shortcut badge
+                Text("⌘⌘")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#555D58"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(hex: "#1A1C1A"))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(Color(hex: "#2E322E"), lineWidth: 1)
+                            )
+                    )
+                    .padding(.leading, 16)
+
+                // Vertical divider
+                Rectangle()
+                    .fill(Color(hex: "#2E322E"))
+                    .frame(width: 1, height: 22)
+                    .padding(.horizontal, 12)
+
+                LumaDirectTextField(
+                    text: $panelState.draft,
+                    placeholder: "Ask Luma anything…",
+                    onSubmit: onSend
                 )
-                .padding(.leading, 16)
 
-            // Vertical divider
-            Rectangle()
-                .fill(Color(hex: "#2E322E"))
-                .frame(width: 1, height: 22)
-                .padding(.horizontal, 12)
-
-            TextField("Ask Luma anything…", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .foregroundColor(.white)
-                .focused(isTextFieldFocused)
-                .tint(.white)
-                .onSubmit { onSend() }
-
-            if !draft.isEmpty {
+                // Send button — dims when draft is empty, fills green when ready
                 Button(action: onSend) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.black)
-                        .frame(width: 36, height: 36)
-                        .background(Color(hex: "#4caf50"))
+                        .foregroundColor(panelState.draft.isEmpty ? Color.black.opacity(0.4) : .black)
+                        .frame(width: 34, height: 34)
+                        .background(panelState.draft.isEmpty ? Color(hex: "#4caf50").opacity(0.35) : Color(hex: "#4caf50"))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .disabled(panelState.draft.isEmpty)
                 .onHover { isHovering in
-                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if isHovering && !panelState.draft.isEmpty { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
-                .transition(.scale.combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.15), value: panelState.draft.isEmpty)
                 .padding(.trailing, 10)
-            } else {
-                Spacer()
-                    .frame(width: 16)
+            }
+            .frame(width: 500, height: 56)
+
+            // Response area — expands below the input inside the same card container
+            if !panelState.response.isEmpty {
+                FloatingResponseArea()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .frame(width: 500, height: 56)
         .background(Color(hex: "#0E1210"))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -214,7 +387,8 @@ private struct WiderCardFloatingInput: View {
                 )
         )
         .shadow(color: Color.black.opacity(0.5), radius: 24, x: 0, y: 8)
-        .animation(.easeInOut(duration: 0.15), value: draft.isEmpty)
+        .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
+        .preferredColorScheme(.dark)
         .onAppear {
             withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
                 gradientRotation = 360
@@ -225,16 +399,17 @@ private struct WiderCardFloatingInput: View {
 
 // MARK: - Style C: Cursor Anchored
 
-/// Cursor-anchored shape with green tab above input. 420 × 66 pt total.
+/// Cursor-anchored shape with green tab above input. 420 × 52 pt input + 14 pt tab.
+/// The response area expands below the input inside the same anchored body.
 private struct CursorAnchoredFloatingInput: View {
 
-    @Binding var draft: String
-    var isTextFieldFocused: FocusState<Bool>.Binding
     var onSend: () -> Void
+
+    @ObservedObject private var panelState = FloatingPanelState.shared
 
     var body: some View {
         VStack(spacing: 0) {
-            // Green anchor tab — sits flush above the input, aligned to leading edge
+            // Green anchor tab — sits flush above the input body
             HStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(Color(hex: "#4caf50"))
@@ -244,38 +419,41 @@ private struct CursorAnchoredFloatingInput: View {
             }
             .padding(.leading, 16)
 
-            // Input row — top-left corner is square (anchored to tab), others rounded
-            HStack(spacing: 10) {
-                TextField("Ask Luma anything…", text: $draft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .focused(isTextFieldFocused)
-                    .tint(.white)
-                    .onSubmit { onSend() }
+            // Anchored body: input row + optional response area, clipped together
+            VStack(spacing: 0) {
+                // Input row
+                HStack(spacing: 10) {
+                    LumaDirectTextField(
+                        text: $panelState.draft,
+                        placeholder: "Ask Luma anything…",
+                        onSubmit: onSend
+                    )
 
-                if !draft.isEmpty {
+                    // Send button — dims when draft is empty, fills solid white when ready
                     Button(action: onSend) {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(Color(hex: "#141614"))
-                            .frame(width: 34, height: 34)
-                            .background(Color.white)
+                            .frame(width: 30, height: 30)
+                            .background(panelState.draft.isEmpty ? Color.white.opacity(0.25) : Color.white)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(panelState.draft.isEmpty)
                     .onHover { isHovering in
-                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        if isHovering && !panelState.draft.isEmpty { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
-                    .transition(.scale.combined(with: .opacity))
-                } else {
-                    Text("esc")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(Color(hex: "#3A3F3A"))
+                    .animation(.easeInOut(duration: 0.15), value: panelState.draft.isEmpty)
+                }
+                .padding(.horizontal, 16)
+                .frame(width: 420, height: 52)
+
+                // Response area — inside the anchored body, slides in below the input
+                if !panelState.response.isEmpty {
+                    FloatingResponseArea()
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.horizontal, 16)
-            .frame(width: 420, height: 52)
             .background(Color(hex: "#141614"))
             .clipShape(
                 UnevenRoundedRectangle(
@@ -298,7 +476,8 @@ private struct CursorAnchoredFloatingInput: View {
             )
             .shadow(color: Color(hex: "#4caf50").opacity(0.08), radius: 20, x: 0, y: 0)
             .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
+            .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
         }
-        .animation(.easeInOut(duration: 0.15), value: draft.isEmpty)
+        .preferredColorScheme(.dark)
     }
 }
