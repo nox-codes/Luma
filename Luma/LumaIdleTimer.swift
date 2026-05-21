@@ -22,7 +22,6 @@ final class LumaIdleTimer {
     private let idleInterval: TimeInterval
     private var timer: DispatchSourceTimer?
     private(set) var isSuspended: Bool = false
-    private var isRunning: Bool = false
 
     init(interval: TimeInterval = 30) {
         self.idleInterval = interval
@@ -47,7 +46,6 @@ final class LumaIdleTimer {
     func stop() {
         timer?.cancel()
         timer = nil
-        isRunning = false
     }
 
     /// Suspends the countdown. Use during onboarding.
@@ -55,7 +53,6 @@ final class LumaIdleTimer {
         isSuspended = true
         timer?.cancel()
         timer = nil
-        isRunning = false
     }
 
     /// Resumes from suspended state and resets the countdown to the full interval.
@@ -75,11 +72,9 @@ final class LumaIdleTimer {
         newTimer.setEventHandler { [weak self] in
             guard let self else { return }
             self.timer = nil
-            self.isRunning = false
             self.onTimeout?()
         }
         newTimer.resume()
         timer = newTimer
-        isRunning = true
     }
 }
