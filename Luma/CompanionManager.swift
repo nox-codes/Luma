@@ -92,6 +92,9 @@ final class CompanionManager: ObservableObject {
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let tutorialManager = PostOnboardingTutorialManager()
+    /// Fires after 30 seconds of no interaction and hides all visible Luma UI.
+    /// The menu bar icon stays visible. Suspended during onboarding.
+    let idleTimer = LumaIdleTimer(interval: 30)
     /// Agent completion summary to surface in the pointer-phrase speech bubble
     /// that appears next to the cursor. Set when a task transitions running→ready;
     /// auto-cleared after 6 seconds so the bubble fades away naturally.
@@ -131,6 +134,9 @@ final class CompanionManager: ObservableObject {
     private var voiceStateCancellable: AnyCancellable?
     private var audioPowerCancellable: AnyCancellable?
     private var permissionProblemCancellable: AnyCancellable?
+    /// Watches UserDefaults for the onboarding completion flag so the idle timer
+    /// can resume the moment the user finishes onboarding.
+    private var onboardingCompletedCancellable: AnyCancellable?
     private var accessibilityCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
     /// Scheduled hide for transient cursor mode — cancelled if the user
@@ -278,6 +284,32 @@ final class CompanionManager: ObservableObject {
         LumaLogger.log("[Luma] start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
 
+        // Wire the idle timer's timeout to hide Luma's visible UI.
+        idleTimer.onTimeout = { [weak self] in
+            guard let self else { return }
+            LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
+            self.overlayWindowManager.hideOverlay()
+            self.isOverlayVisible = false
+            NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
+        }
+
+        // Suspend the idle timer while onboarding is in progress.
+        if !hasCompletedOnboarding {
+            idleTimer.suspend()
+        }
+
+        // Resume the idle timer the moment onboarding finishes.
+        onboardingCompletedCancellable = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let isOnboarded = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+                if isOnboarded && self.idleTimer.isSuspended {
+                    self.idleTimer.resume()
+                    LumaLogger.log("[LumaIdleTimer] Onboarding complete — idle timer resumed")
+                }
+            }
+
         // Reinitialize ScreenCaptureKit when the user grants screen recording permission
         // during a live session so captures work immediately without an app restart.
         screenRecordingPermissionObserver = NotificationCenter.default.addObserver(
@@ -312,6 +344,7 @@ final class CompanionManager: ObservableObject {
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
+            idleTimer.start()
         }
 
         // Listen for the pointAt notification from CursorGuide / LumaImageProcessingEngine.
@@ -550,6 +583,7 @@ final class CompanionManager: ObservableObject {
     }
 
     func stop() {
+        idleTimer.stop()
         globalPushToTalkShortcutMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
@@ -988,6 +1022,9 @@ final class CompanionManager: ObservableObject {
     /// handles clarification and confirmation loops, then dispatches to
     /// the appropriate engine (CLI, agent, walkthrough, or Claude response).
     private func classifyAndRouteInput(_ transcript: String) async {
+        // Any user input resets the 30-second idle countdown.
+        idleTimer.reset()
+
         // SYSTEM STATE GUARD — if a visual agent session is actively running, forward
         // the new voice input to it as a follow-up prompt so the agent has full context.
         // For all other paths (CLI, guide, response), a new request always replaces the
@@ -1526,6 +1563,7 @@ final class CompanionManager: ObservableObject {
             guard !Task.isCancelled else { return }
             overlayWindowManager.fadeOutAndHideOverlay()
             isOverlayVisible = false
+            idleTimer.stop()
         }
     }
 

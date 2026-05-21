@@ -215,6 +215,10 @@ final class MenuBarPanelManager: NSObject {
     // MARK: - Panel Lifecycle
 
     private func showPanel() {
+        // Menu bar icon click counts as an interaction — reset the idle countdown.
+        companionManager.idleTimer.reset()
+        companionManager.idleTimer.start()
+
         if panel == nil {
             createPanel()
         }
