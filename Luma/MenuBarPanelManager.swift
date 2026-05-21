@@ -375,6 +375,16 @@ final class MenuBarPanelManager: NSObject {
                 return
             }
 
+            // Ignore clicks on the status item button.
+            // Because the status item is owned by SystemUIServer, the global event
+            // monitor sees the same click that triggered statusItemClicked — we must
+            // exclude that area so the panel doesn't open and immediately close.
+            if let statusButton = self.statusItem?.button,
+               let buttonWindow = statusButton.window,
+               buttonWindow.frame.contains(clickLocation) {
+                return
+            }
+
             // Delay dismissal slightly to avoid closing the panel when
             // a system permission dialog appears (e.g. microphone access).
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
