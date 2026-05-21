@@ -1065,7 +1065,7 @@ final class CompanionManager: ObservableObject {
     /// Runs LumaIntentClassifier to determine the best execution path,
     /// handles clarification and confirmation loops, then dispatches to
     /// the appropriate engine (CLI, agent, walkthrough, or Claude response).
-    private func classifyAndRouteInput(_ transcript: String) async {
+    func classifyAndRouteInput(_ transcript: String) async {
         // Any user input resets the 30-second idle countdown.
         idleTimer.reset()
 
@@ -2019,6 +2019,13 @@ final class CompanionManager: ObservableObject {
                 LumaLogger.log("[Luma] Onboarding demo error: \(error)")
             }
         }
+    }
+
+    /// Speaks text during the onboarding demo sequence.
+    /// Exposed so LumaDemoOrchestrator can use the shared NativeTTSClient
+    /// without duplicating TTS setup code.
+    func speakDemoText(_ text: String) {
+        nativeTTSClient.speak(text)
     }
 
     // MARK: - Agent Session Lifecycle

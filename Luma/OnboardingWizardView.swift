@@ -181,9 +181,11 @@ struct OnboardingWizardView: View {
                     onAllPermissionsGranted: advanceToNextStep
                 )
             case 5:
-                // Placeholder for dynamic demo — implemented in Task 8.
-                // Auto-advances immediately so the flow isn't blocked.
-                OnboardingDemoPlaceholderStep(onDemoComplete: advanceToNextStep)
+                // Dynamic demo — AX scan, narrate, point cursor, execute real command.
+                OnboardingDemoStep(
+                    companionManager: companionManager,
+                    onDemoComplete: advanceToNextStep
+                )
             case 6:
                 OnboardingDoneStep(onStartLearning: completeOnboarding)
             default:
@@ -997,30 +999,3 @@ private struct OnboardingSecondaryButton: View {
     }
 }
 
-// MARK: - Demo Step Placeholder (replaced by Task 8)
-
-/// Temporary placeholder for the dynamic demo step.
-/// Replaced by OnboardingDemoStep once LumaDemoOrchestrator is implemented (Task 8).
-@MainActor
-private struct OnboardingDemoPlaceholderStep: View {
-    var onDemoComplete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Text("Demo")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(Color(hex: "#ECEEED"))
-            Button("Continue →") { onDemoComplete() }
-                .buttonStyle(.plain)
-                .foregroundColor(Color(hex: "#ECEEED"))
-                .padding(.horizontal, 24)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(hex: "#2563EB")))
-                .onHover { isHovering in
-                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-            Spacer()
-        }
-    }
-}
