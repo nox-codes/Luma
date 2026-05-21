@@ -691,6 +691,12 @@ final class CompanionManager: ObservableObject {
         // Track individual permission grants as they happen
         if !previouslyHadAccessibility && hasAccessibilityPermission {
             LumaAnalytics.trackPermissionGranted(permission: "accessibility")
+            NotificationCenter.default.post(
+                name: .lumaPermissionGranted,
+                object: nil,
+                userInfo: ["permission": LumaRequiredPermission.accessibility.rawValue]
+            )
+            LumaLogger.log("[Luma] Posted lumaPermissionGranted for accessibility")
         }
         if !previouslyHadScreenRecording && hasScreenRecordingPermission {
             LumaAnalytics.trackPermissionGranted(permission: "screen_recording")
@@ -698,9 +704,21 @@ final class CompanionManager: ObservableObject {
             // reinitialize ScreenCaptureKit without requiring an app restart.
             NotificationCenter.default.post(name: .lumaScreenRecordingPermissionGranted, object: nil)
             LumaLogger.log("[Luma] Screen recording permission granted — posting reinit notification")
+            NotificationCenter.default.post(
+                name: .lumaPermissionGranted,
+                object: nil,
+                userInfo: ["permission": LumaRequiredPermission.screenRecording.rawValue]
+            )
+            LumaLogger.log("[Luma] Posted lumaPermissionGranted for screenRecording")
         }
         if !previouslyHadMicrophone && hasMicrophonePermission {
             LumaAnalytics.trackPermissionGranted(permission: "microphone")
+            NotificationCenter.default.post(
+                name: .lumaPermissionGranted,
+                object: nil,
+                userInfo: ["permission": LumaRequiredPermission.microphone.rawValue]
+            )
+            LumaLogger.log("[Luma] Posted lumaPermissionGranted for microphone")
         }
         // Screen content permission is persisted — once the user has approved the
         // SCShareableContent picker, we don't need to re-check it.

@@ -167,7 +167,7 @@ struct CompanionPanelView: View {
                 || ProfileManager.shared.profiles.isEmpty
                 || AccountManager.shared.currentAccount == nil
             if needsOnboarding {
-                LumaOnboardingWindowManager.shared.showOnboardingWindow()
+                LumaOnboardingWindowManager.shared.showOnboardingWindow(companionManager: companionManager)
             }
         }
         .sheet(isPresented: $showPINEntryForSettings) {
@@ -704,7 +704,7 @@ struct CompanionPanelView: View {
                 }
             } else {
                 Button(action: {
-                    LumaOnboardingWindowManager.shared.showOnboardingWindow()
+                    LumaOnboardingWindowManager.shared.showOnboardingWindow(companionManager: companionManager)
                 }) {
                     Text("Start")
                         .font(.system(size: 14, weight: .semibold))

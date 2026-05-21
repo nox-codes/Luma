@@ -25,6 +25,9 @@ struct OnboardingWizardView: View {
     /// Forward navigation slides new content in from the trailing edge;
     /// backward navigation slides it in from the leading edge.
     @State private var isNavigatingForward: Bool = true
+    /// The running CompanionManager instance — passed in by the window manager.
+    /// Needed so permission steps can read live permission state via @Published properties.
+    @ObservedObject var companionManager: CompanionManager
 
     var body: some View {
         HStack(spacing: 0) {
@@ -43,7 +46,7 @@ struct OnboardingWizardView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Bottom nav: back + step counter. Only visible on middle steps (not welcome or done).
-                if currentStep > 0 && currentStep < 4 {
+                if currentStep > 0 && currentStep < 6 {
                     bottomNavigationRow
                 }
             }
@@ -92,7 +95,7 @@ struct OnboardingWizardView: View {
     }
 
     /// Human-readable sidebar step names — one per wizard step (indices 0–4).
-    private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Done"]
+    private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Permissions", "Demo", "Done"]
 
     /// Renders a single sidebar step row with the correct visual state.
     private func onboardingSidebarStepRow(stepIndex: Int, stepName: String) -> some View {
@@ -172,6 +175,16 @@ struct OnboardingWizardView: View {
             case 3:
                 OnboardingAPIProfileStep(onProfileSaved: advanceToNextStep)
             case 4:
+                // Permissions gate — Continue only enabled when all three permissions are granted.
+                OnboardingPermissionsStep(
+                    companionManager: companionManager,
+                    onAllPermissionsGranted: advanceToNextStep
+                )
+            case 5:
+                // Placeholder for dynamic demo — implemented in Task 8.
+                // Auto-advances immediately so the flow isn't blocked.
+                OnboardingDemoPlaceholderStep(onDemoComplete: advanceToNextStep)
+            case 6:
                 OnboardingDoneStep(onStartLearning: completeOnboarding)
             default:
                 // Should never be reached, but prevents a blank view if state is invalid
@@ -197,7 +210,7 @@ struct OnboardingWizardView: View {
             Spacer()
 
             // Step counter — "Step N of 3" where N is the current middle step (1–3)
-            Text("Step \(currentStep) of 3")
+            Text("Step \(currentStep) of 5")
                 .font(.system(size: 11))
                 .foregroundColor(Color(hex: "#555D58"))
         }
@@ -979,6 +992,33 @@ private struct OnboardingSecondaryButton: View {
         .onHover { hovering in
             isHovering = hovering
             if hovering && !isDisabled { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Demo Step Placeholder (replaced by Task 8)
+
+/// Temporary placeholder for the dynamic demo step.
+/// Replaced by OnboardingDemoStep once LumaDemoOrchestrator is implemented (Task 8).
+private struct OnboardingDemoPlaceholderStep: View {
+    var onDemoComplete: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Text("Demo")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(Color(hex: "#ECEEED"))
+            Button("Continue →") { onDemoComplete() }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(hex: "#ECEEED"))
+                .padding(.horizontal, 24)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(hex: "#2563EB")))
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            Spacer()
         }
     }
 }

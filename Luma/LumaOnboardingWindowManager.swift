@@ -21,13 +21,17 @@ final class LumaOnboardingWindowManager {
     private var onboardingWindow: NSWindow?
     private let windowSize = NSSize(width: 760, height: 540)
     private let minimumWindowSize = NSSize(width: 680, height: 480)
+    /// Weak reference to the running CompanionManager instance.
+    /// Set by the caller before showing the window. Used to inject into OnboardingWizardView.
+    private weak var companionManagerInstance: CompanionManager?
 
     private init() {}
 
     /// Shows the onboarding wizard window. No-ops if already visible.
     /// Reads / writes `CompanionManager.shared.hasCompletedOnboarding` directly
     /// so the companion panel reacts when the wizard completes.
-    func showOnboardingWindow() {
+    func showOnboardingWindow(companionManager: CompanionManager) {
+        self.companionManagerInstance = companionManager
         if let existing = onboardingWindow, existing.isVisible { return }
 
         if onboardingWindow == nil {
@@ -98,8 +102,11 @@ final class LumaOnboardingWindowManager {
         window.isMovableByWindowBackground = true
 
         let hostingView = NSHostingView(
-            rootView: OnboardingWizardView(hasCompletedOnboarding: completionBinding)
-                .preferredColorScheme(.dark)
+            rootView: OnboardingWizardView(
+                hasCompletedOnboarding: completionBinding,
+                companionManager: companionManagerInstance!
+            )
+            .preferredColorScheme(.dark)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: .black.opacity(0.60), radius: 36, y: 14)
         )
