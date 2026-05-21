@@ -52,7 +52,7 @@ final class LumaFlowEngine {
 
     /// Creates an agent session, runs the planning + execution loop, and drives the
     /// dock bubble via LumaFlowRuntime. Called by CompanionManager for `.visualAgent` paths.
-    func startFlow(goal: String, companionManager: CompanionManager) async {
+    func startFlow(goal: String, companionManager: CompanionManager, isTransient: Bool = false) async {
         let context = LumaFlowContext(goal: goal)
         activeContext = context
 
@@ -63,6 +63,7 @@ final class LumaFlowEngine {
         let session = AgentSession()
         activeSessionId = session.id
         session.bind(to: runtime)
+        session.isTransient = isTransient
         companionManager.agentSessions.append(session)
         companionManager.activeAgentSessionID = session.id
         companionManager.updateAgentDock()

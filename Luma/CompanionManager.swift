@@ -457,6 +457,19 @@ final class CompanionManager: ObservableObject {
                 // Update dock to show new status
                 self.updateAgentDock()
 
+                // Auto-dismiss transient sessions (spawned by the classifier for a single task).
+                // Persistent sessions (user-requested agents) remain until the user dismisses them.
+                if let completedSessionId = notification.userInfo?["sessionId"] as? UUID,
+                   let completedSession = self.agentSessions.first(where: { $0.id == completedSessionId }),
+                   completedSession.isTransient {
+                    // Small delay so the user can read the completion bubble before it disappears.
+                    Task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
+                        await self.dismissAgentSession(id: completedSessionId)
+                        LumaLogger.log("[Luma] Auto-dismissed transient agent session: \(completedSessionId)")
+                    }
+                }
+
                 // Persist updated session state
                 self.persistAllAgentSessions()
 
@@ -1027,6 +1040,22 @@ final class CompanionManager: ObservableObject {
         // Any user input resets the 30-second idle countdown.
         idleTimer.reset()
 
+        // Check for explicit agent spawn request BEFORE running the full classifier.
+        // "Luma agent", "new agent", or "spawn agent" always spawns a persistent agent,
+        // bypassing classification — the user is making a direct structural request.
+        let lowercasedTranscript = transcript.lowercased()
+        let isExplicitAgentRequest = lowercasedTranscript.contains("luma agent")
+            || lowercasedTranscript.contains("new agent")
+            || lowercasedTranscript.contains("spawn agent")
+        if isExplicitAgentRequest {
+            LumaLogger.log("[LumaClassifier] Explicit agent request detected — spawning persistent agent")
+            // isTransient is false (default) — this agent persists until dismissed by the user
+            _ = createAndSelectNewAgentSession()
+            updateAgentDock()
+            voiceState = .idle
+            return
+        }
+
         // SYSTEM STATE GUARD — if a visual agent session is actively running, forward
         // the new voice input to it as a follow-up prompt so the agent has full context.
         // For all other paths (CLI, guide, response), a new request always replaces the
@@ -1157,6 +1186,8 @@ final class CompanionManager: ObservableObject {
             let claudeCodeSession = AgentSession()
             agentSessions.append(claudeCodeSession)
             activeAgentSessionID = claudeCodeSession.id
+            // Mark as transient — auto-dismissed after task completion.
+            claudeCodeSession.isTransient = true
 
             // Auto-detect Claude Code CLI; fall back to API runtime if not installed
             let claudeCodeRuntime = AgentRuntimeManager.shared.createRuntime()
@@ -1195,7 +1226,7 @@ final class CompanionManager: ObservableObject {
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                await LumaFlowEngine.shared.startFlow(goal: goal, companionManager: self)
+                await LumaFlowEngine.shared.startFlow(goal: goal, companionManager: self, isTransient: true)
             }
             LumaIntentClassifier.shared.recordExecutedAction("started flow for: \(goal.prefix(60))")
             voiceState = .idle

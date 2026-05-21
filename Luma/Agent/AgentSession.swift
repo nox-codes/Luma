@@ -92,6 +92,11 @@ final class AgentSession: ObservableObject, Identifiable {
     /// bubble to switch to CLI display mode (monospace output, command disclosure).
     @Published private(set) var cliCommand: String?
 
+    /// When true, this session was spawned automatically to handle a single
+    /// classified task. It will be dismissed automatically when the task
+    /// completes — the user did not explicitly request a persistent agent.
+    var isTransient: Bool = false
+
     /// True when this session was spawned to run a single shell command.
     var isCLISession: Bool { cliCommand != nil }
 
