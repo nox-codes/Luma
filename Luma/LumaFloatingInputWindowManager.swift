@@ -117,6 +117,10 @@ final class LumaFloatingInputWindowManager: NSObject {
             y: cursorPosition.y - panelHeight - 8
         )
         floatingPanel.setFrameOrigin(panelOrigin)
+        // Activate the app so the panel can become key and @FocusState works.
+        // Without this, a nonactivatingPanel shown from a background double-tap
+        // won't receive key events, so the text field never accepts input.
+        NSApp.activate(ignoringOtherApps: true)
         floatingPanel.makeKeyAndOrderFront(nil)
         floatingPanel.makeFirstResponder(hostingView)
 

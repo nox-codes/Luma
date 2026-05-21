@@ -49,8 +49,9 @@ struct LumaFloatingInputView: View {
             onFocusChanged(newValue)
         }
         .onAppear {
-            // Slight delay so the NSPanel is fully key before activating @FocusState
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // 0.15s gives NSApp.activate + makeKeyAndOrderFront time to propagate
+            // before @FocusState fires. 0.05s was too short for the activation path.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isTextFieldFocused = true
             }
         }

@@ -155,10 +155,12 @@ final class CompanionManager: ObservableObject {
     /// The closure runs the action; nil means the user cancelled.
     private var pendingConfirmationAction: (() async -> Void)?
 
-    /// True when all three required permissions (accessibility, screen recording,
-    /// microphone) are granted. Used by the panel to show a single "all good" state.
+    /// True when all three required TCC permissions are granted.
+    /// hasScreenContentPermission is intentionally excluded — it was a 4th SCKit
+    /// picker gate that is never triggered in the current onboarding flow and
+    /// blocked the overlay from ever appearing.
     var allPermissionsGranted: Bool {
-        hasAccessibilityPermission && hasScreenRecordingPermission && hasMicrophonePermission && hasScreenContentPermission
+        hasAccessibilityPermission && hasScreenRecordingPermission && hasMicrophonePermission
     }
 
     /// Whether the blue cursor overlay is currently visible on screen.
@@ -302,13 +304,22 @@ final class CompanionManager: ObservableObject {
         }
 
         // Wire the idle timer's timeout to hide Luma's visible UI.
+        // Never hide while the user is actively interacting — listening, processing, or
+        // receiving a response. In those states reset the countdown and try again later.
         idleTimer.onTimeout = { [weak self] in
             guard let self else { return }
-            LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
-            self.overlayWindowManager.hideOverlay()
-            self.isOverlayVisible = false
-            LumaFloatingInputWindowManager.shared.hide()
-            NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
+            switch self.voiceState {
+            case .listening, .processing, .responding:
+                // User is mid-interaction — restart the countdown instead of hiding
+                LumaLogger.log("[LumaIdleTimer] Skipping hide — voice state is \(self.voiceState)")
+                self.idleTimer.reset()
+            case .idle:
+                LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
+                self.overlayWindowManager.hideOverlay()
+                self.isOverlayVisible = false
+                LumaFloatingInputWindowManager.shared.hide()
+                NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
+            }
         }
 
         // Suspend the idle timer while onboarding is in progress.
