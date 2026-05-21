@@ -145,7 +145,8 @@ final class LumaDemoOrchestrator: ObservableObject {
             guard interactiveRoles.contains(role) else { continue }
 
             var frameRef: CFTypeRef?
-            AXUIElementCopyAttributeValue(child, kAXFrameAttribute as CFString, &frameRef)
+            // kAXFrameAttribute = "AXFrame" — use the raw string to avoid HIServices import dependency
+            AXUIElementCopyAttributeValue(child, "AXFrame" as CFString, &frameRef)
             guard let frameRef else { continue }
             guard let frame = extractCGRect(from: frameRef) else { continue }
 
