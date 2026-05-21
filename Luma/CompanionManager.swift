@@ -153,6 +153,7 @@ final class CompanionManager: ObservableObject {
     private var screenshotShortcutObserver: NSObjectProtocol?
     private var agentTaskCompletedObserver: NSObjectProtocol?
     private var screenRecordingPermissionObserver: NSObjectProtocol?
+    private var floatingInputTriggeredObserver: NSObjectProtocol?
 
     /// Task that restores the overlay visibility after the screenshot hide delay.
     private var screenshotHideRestoreTask: Task<Void, Never>?
@@ -283,6 +284,41 @@ final class CompanionManager: ObservableObject {
         refreshAllPermissions()
         LumaLogger.log("[Luma] start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
+
+        // Start the double-tap modifier detector for the floating input bubble (⌘⌘ or ^^)
+        LumaDoubleTapModifierDetector.shared.start()
+
+        // Wire the floating input bubble's send action to the intent classifier pipeline
+        LumaFloatingInputWindowManager.shared.onSendText = { [weak self] text in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Sending from the floating bubble counts as an interaction — reset the idle countdown
+                self.idleTimer.reset()
+                await self.classifyAndRouteInput(text)
+            }
+        }
+
+        // Show or refocus the floating bubble when the double-tap fires.
+        // If Luma is hidden (idle auto-hide), unhide it first.
+        floatingInputTriggeredObserver = NotificationCenter.default.addObserver(
+            forName: .lumaFloatingInputTriggered,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !self.isOverlayVisible {
+                    self.overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
+                    self.isOverlayVisible = true
+                    self.idleTimer.start()
+                }
+                // Triggering the bubble counts as an interaction
+                self.idleTimer.reset()
+                LumaFloatingInputWindowManager.shared.showOrRefocus()
+                LumaLogger.log("[FloatingInput] Triggered by double-tap modifier")
+            }
+        }
 
         // Wire the idle timer's timeout to hide Luma's visible UI.
         idleTimer.onTimeout = { [weak self] in
@@ -632,6 +668,12 @@ final class CompanionManager: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             screenRecordingPermissionObserver = nil
         }
+
+        if let observer = floatingInputTriggeredObserver {
+            NotificationCenter.default.removeObserver(observer)
+            floatingInputTriggeredObserver = nil
+        }
+        LumaDoubleTapModifierDetector.shared.stop()
 
         currentResponseTask?.cancel()
         currentResponseTask = nil
