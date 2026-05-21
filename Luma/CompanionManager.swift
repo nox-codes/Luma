@@ -14,6 +14,13 @@ import PostHog
 import ScreenCaptureKit
 import SwiftUI
 
+extension Notification.Name {
+    /// Posted when screen recording permission transitions from denied to granted
+    /// during a live session. Observers should reinitialize their ScreenCaptureKit
+    /// state rather than requiring an app restart.
+    static let lumaScreenRecordingPermissionGranted = Notification.Name("lumaScreenRecordingPermissionGranted")
+}
+
 enum CompanionVoiceState {
     case idle
     case listening
@@ -139,6 +146,7 @@ final class CompanionManager: ObservableObject {
     /// When detected the overlay hides for 2 seconds so it doesn't appear in the screenshot.
     private var screenshotShortcutObserver: NSObjectProtocol?
     private var agentTaskCompletedObserver: NSObjectProtocol?
+    private var screenRecordingPermissionObserver: NSObjectProtocol?
 
     /// Task that restores the overlay visibility after the screenshot hide delay.
     private var screenshotHideRestoreTask: Task<Void, Never>?
@@ -269,6 +277,19 @@ final class CompanionManager: ObservableObject {
         refreshAllPermissions()
         LumaLogger.log("[Luma] start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
+
+        // Reinitialize ScreenCaptureKit when the user grants screen recording permission
+        // during a live session so captures work immediately without an app restart.
+        screenRecordingPermissionObserver = NotificationCenter.default.addObserver(
+            forName: .lumaScreenRecordingPermissionGranted,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task {
+                await CompanionScreenCaptureUtility.reinitializeCapture()
+            }
+        }
+
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
@@ -549,6 +570,11 @@ final class CompanionManager: ObservableObject {
             agentTaskCompletedObserver = nil
         }
 
+        if let observer = screenRecordingPermissionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenRecordingPermissionObserver = nil
+        }
+
         currentResponseTask?.cancel()
         currentResponseTask = nil
         shortcutTransitionCancellable?.cancel()
@@ -610,6 +636,10 @@ final class CompanionManager: ObservableObject {
         }
         if !previouslyHadScreenRecording && hasScreenRecordingPermission {
             LumaAnalytics.trackPermissionGranted(permission: "screen_recording")
+            // Notify observers that screen recording was just granted so they can
+            // reinitialize ScreenCaptureKit without requiring an app restart.
+            NotificationCenter.default.post(name: .lumaScreenRecordingPermissionGranted, object: nil)
+            LumaLogger.log("[Luma] Screen recording permission granted — posting reinit notification")
         }
         if !previouslyHadMicrophone && hasMicrophonePermission {
             LumaAnalytics.trackPermissionGranted(permission: "microphone")

@@ -1,0 +1,26 @@
+<h2>Interactive Demo — What does it actually do?</h2>
+<p class="subtitle">After all permissions are granted, Luma runs an interactive demo. What should that demo show?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Scripted walkthrough</h3>
+      <p>Fixed sequence: Luma speaks a preset script, its blue cursor points to real UI elements on screen (menu bar, current app), explains what it sees, then says "Try asking me something." Simple, predictable, always the same.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Dynamic demo using live screen context</h3>
+      <p>Luma scans what's currently on screen, picks 2–3 real UI elements visible right now, narrates what it sees ("I can see you have Finder open…"), points the cursor at them, then invites a command. Different every time.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Skip the demo</h3>
+      <p>No demo at all. Once permissions are granted, Luma just says "You're all set — try holding Ctrl+Option and speaking a command." Fast and no-nonsense.</p>
+    </div>
+  </div>
+</div>

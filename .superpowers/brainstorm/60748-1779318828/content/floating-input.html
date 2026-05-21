@@ -1,0 +1,112 @@
+<h2>Floating Input Bubble — Shape &amp; Behaviour</h2>
+<p class="subtitle">Triggered by ⌘⌘ or ^^ (double-tap within 300ms). Spawns at cursor, follows mouse with spring lag.</p>
+
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+
+  <!-- Shape diagram -->
+  <div class="mockup" style="flex:0 0 300px">
+    <div class="mockup-header">Shape — top-left corner 0px, rest fully rounded</div>
+    <div class="mockup-body" style="background:#0d0d0f;padding:32px;display:flex;flex-direction:column;align-items:center;gap:24px">
+
+      <!-- Idle orb state -->
+      <div>
+        <div style="font-size:11px;color:#555;text-align:center;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Idle → triggers to</div>
+        <div style="width:48px;height:48px;background:#1e2a1e;border:1.5px solid #2d4a2d;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center">
+          <div style="width:16px;height:16px;background:#4caf50;border-radius:50%;opacity:0.8"></div>
+        </div>
+      </div>
+
+      <div style="color:#333;font-size:20px">↓</div>
+
+      <!-- Input bubble shape -->
+      <div>
+        <div style="font-size:11px;color:#555;text-align:center;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Input bubble (morphed)</div>
+        <div style="
+          background: #141614;
+          border: 1px solid rgba(74,200,100,0.25);
+          width: 220px;
+          padding: 10px 14px;
+          border-radius: 0px 20px 20px 20px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-shadow: 0 0 16px rgba(74,200,100,0.08), 0 2px 8px rgba(0,0,0,0.4);
+          position: relative;
+        ">
+          <!-- Sharp corner callout -->
+          <div style="position:absolute;top:-22px;left:0;font-size:10px;color:#4a9eff;white-space:nowrap">← top-left: 0px radius</div>
+          <div style="position:absolute;bottom:-18px;right:0;font-size:10px;color:#555;white-space:nowrap">all other corners: 999px →</div>
+
+          <div style="flex:1;color:#555;font-size:13px;font-style:italic">Ask Luma anything…</div>
+          <!-- Send button -->
+          <div style="width:26px;height:26px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <div style="width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid #141614;margin-left:2px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="color:#333;font-size:20px">↓ (on send)</div>
+
+      <!-- Orb state again -->
+      <div>
+        <div style="font-size:11px;color:#555;text-align:center;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Morphs back to orb → intent routed</div>
+        <div style="width:48px;height:48px;background:#1e2a1e;border:1.5px solid #2d4a2d;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center">
+          <div style="width:16px;height:16px;background:#4caf50;border-radius:50%;opacity:0.8;animation:pulse 1s infinite"></div>
+        </div>
+      </div>
+      <style>@keyframes pulse{0%,100%{opacity:0.8;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}</style>
+
+    </div>
+  </div>
+
+  <!-- Behaviour spec -->
+  <div style="flex:1;min-width:260px">
+    <div class="mockup">
+      <div class="mockup-header">Behaviour</div>
+      <div class="mockup-body" style="background:#0d0d0f;padding:20px;font-family:system-ui">
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:#4a9eff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Trigger</div>
+          <div style="font-size:13px;color:#ccc;line-height:1.6">Double-tap ⌘ <em>or</em> ^ within 300ms window<br>
+          Detected via CGEventTap (modifier flags changed events)<br>
+          If Luma is hidden → unhide first, then spawn bubble</div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:#4a9eff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Spawn &amp; focus</div>
+          <div style="font-size:13px;color:#ccc;line-height:1.6">NSPanel appears at current cursor position<br>
+          Immediately becomes key window — autofocused<br>
+          User types without clicking anything</div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:#4a9eff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Mouse follow</div>
+          <div style="font-size:13px;color:#ccc;line-height:1.6">25 Hz timer lerps window origin toward cursor<br>
+          Spring factor: 0.12 per tick (feels weightless, slight lag)<br>
+          Pauses following while user is actively typing</div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:#4a9eff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Click-outside &amp; re-trigger</div>
+          <div style="font-size:13px;color:#ccc;line-height:1.6">Click outside → unfocus, stop following. Text persists.<br>
+          Re-trigger hotkey → refocus, resume following, text intact<br>
+          Successful send → draft cleared</div>
+        </div>
+
+        <div>
+          <div style="font-size:11px;color:#4a9eff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Styling</div>
+          <div style="font-size:13px;color:#ccc;line-height:1.6">Background: DS.Colors.cardSurface (#141614)<br>
+          Border: accent color at 25% opacity<br>
+          Glow: subtle accent shadow (8px blur)<br>
+          Cursor: white text cursor<br>
+          Send button: white fill, dark arrow icon<br>
+          Placeholder: muted accent (#555 or theme dim)</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Does the shape (0px top-left, fully rounded elsewhere) and the follow/focus behaviour match what you had in mind?</p>

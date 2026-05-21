@@ -129,6 +129,27 @@ enum CompanionScreenCaptureUtility {
 
         return capturedScreens
     }
+
+    /// Clears any cached ScreenCaptureKit state that was formed while screen
+    /// recording permission was denied. Call this after the user grants permission
+    /// so that subsequent captures succeed without an app restart.
+    ///
+    /// SCShareableContent caches the denied state internally. The only reliable
+    /// way to clear it is to issue a new shareable-content request, which forces
+    /// SCK to re-evaluate the current permission state.
+    static func reinitializeCapture() async {
+        do {
+            // Issuing this request is enough to flush the SCK permission cache.
+            // We discard the result — the next real capture call will succeed.
+            _ = try await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: true
+            )
+            LumaLogger.log("[ScreenCapture] ScreenCaptureKit reinitialized after permission grant")
+        } catch {
+            LumaLogger.log("[ScreenCapture] reinitializeCapture error (non-fatal): \(error)")
+        }
+    }
 }
 
 // MARK: - ScreenCapture

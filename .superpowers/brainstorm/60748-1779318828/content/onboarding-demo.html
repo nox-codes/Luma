@@ -1,0 +1,123 @@
+<h2>Onboarding Flow — Permissions + Demo</h2>
+<p class="subtitle">Two screens: permission setup gate, then dynamic demo. Demo never shows if any permission is missing.</p>
+
+<div class="split" style="gap:24px;align-items:flex-start">
+
+  <!-- SCREEN 1: Permissions -->
+  <div class="mockup" style="flex:1">
+    <div class="mockup-header">Screen 1 — Permission Setup</div>
+    <div class="mockup-body" style="background:#0d0d0f;padding:24px;font-family:system-ui">
+
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:28px;font-weight:700;color:#fff;letter-spacing:-0.5px">Give Luma access</div>
+        <div style="font-size:13px;color:#888;margin-top:4px">All three permissions are required to continue</div>
+      </div>
+
+      <!-- Permission Row: Screen Recording -->
+      <div style="background:#1a1a1f;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;border:1px solid #2a2a30">
+        <div style="width:36px;height:36px;background:#1c2a1c;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">🖥</div>
+        <div style="flex:1">
+          <div style="color:#fff;font-size:14px;font-weight:500">Screen Recording</div>
+          <div style="color:#666;font-size:12px;margin-top:2px">Lets Luma see your screen to assist you</div>
+        </div>
+        <!-- Drag affordance -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="width:32px;height:32px;background:#1a2a1a;border:1.5px dashed #3a6b3a;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:grab;font-size:16px" title="Drag to System Settings">
+            <div style="width:18px;height:18px;background:#1a1a1f;border-radius:4px;border:1px solid #444;display:flex;align-items:center;justify-content:center;font-size:10px">L</div>
+          </div>
+          <div style="font-size:9px;color:#555;text-align:center;line-height:1.2">drag to<br>settings</div>
+        </div>
+        <!-- Status: not granted -->
+        <div style="background:#2a1a1a;color:#cc4444;font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid #441a1a;white-space:nowrap">Required</div>
+      </div>
+
+      <!-- Permission Row: Accessibility — GRANTED -->
+      <div style="background:#1a1a1f;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;border:1px solid #1a3a1a">
+        <div style="width:36px;height:36px;background:#1a2a1c;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">♿️</div>
+        <div style="flex:1">
+          <div style="color:#fff;font-size:14px;font-weight:500">Accessibility</div>
+          <div style="color:#666;font-size:12px;margin-top:2px">Lets Luma read and interact with UI elements</div>
+        </div>
+        <!-- Drag affordance (faded since granted) -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0.3">
+          <div style="width:32px;height:32px;background:#1a2a1a;border:1.5px dashed #3a6b3a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px">
+            <div style="width:18px;height:18px;background:#1a1a1f;border-radius:4px;border:1px solid #444;display:flex;align-items:center;justify-content:center;font-size:10px">L</div>
+          </div>
+          <div style="font-size:9px;color:#555;text-align:center;line-height:1.2">drag to<br>settings</div>
+        </div>
+        <!-- Status: granted -->
+        <div style="background:#1a2f1a;color:#4caf50;font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid #2a5a2a;white-space:nowrap">✓ Granted</div>
+      </div>
+
+      <!-- Permission Row: Microphone -->
+      <div style="background:#1a1a1f;border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px;border:1px solid #2a2a30">
+        <div style="width:36px;height:36px;background:#1c1c2a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">🎙</div>
+        <div style="flex:1">
+          <div style="color:#fff;font-size:14px;font-weight:500">Microphone</div>
+          <div style="color:#666;font-size:12px;margin-top:2px">Lets Luma hear your voice commands</div>
+        </div>
+        <!-- Drag affordance -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="width:32px;height:32px;background:#1a2a1a;border:1.5px dashed #3a6b3a;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:grab;font-size:16px">
+            <div style="width:18px;height:18px;background:#1a1a1f;border-radius:4px;border:1px solid #444;display:flex;align-items:center;justify-content:center;font-size:10px">L</div>
+          </div>
+          <div style="font-size:9px;color:#555;text-align:center;line-height:1.2">drag to<br>settings</div>
+        </div>
+        <!-- Status: not granted -->
+        <div style="background:#2a1a1a;color:#cc4444;font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid #441a1a;white-space:nowrap">Required</div>
+      </div>
+
+      <!-- Continue button (disabled) -->
+      <div style="text-align:center">
+        <div style="display:inline-block;background:#1a1a1f;color:#444;font-size:14px;font-weight:600;padding:10px 32px;border-radius:10px;border:1px solid #2a2a30;cursor:not-allowed">
+          Continue →
+        </div>
+        <div style="font-size:11px;color:#555;margin-top:8px">Waiting for Screen Recording, Microphone…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: Demo -->
+  <div class="mockup" style="flex:1">
+    <div class="mockup-header">Screen 2 — Dynamic Demo (all permissions granted)</div>
+    <div class="mockup-body" style="background:#0d0d0f;padding:24px;font-family:system-ui">
+
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:28px;font-weight:700;color:#fff;letter-spacing:-0.5px">Meet Luma</div>
+        <div style="font-size:13px;color:#888;margin-top:4px">Watch what Luma can see right now</div>
+      </div>
+
+      <!-- Live screen preview placeholder -->
+      <div style="background:#111;border:1px solid #222;border-radius:10px;padding:16px;margin-bottom:16px;min-height:120px;display:flex;align-items:center;justify-content:center;position:relative">
+        <div style="color:#333;font-size:13px">[ Live screen thumbnail ]</div>
+        <!-- Cursor dot overlay -->
+        <div style="position:absolute;top:40px;left:80px;width:12px;height:12px;background:#4a9eff;border-radius:50%;box-shadow:0 0 8px #4a9eff;"></div>
+        <div style="position:absolute;top:24px;left:66px;background:#1a2a3a;border:1px solid #4a9eff;border-radius:6px;padding:3px 8px;font-size:10px;color:#7ac0ff;white-space:nowrap">Finder — sidebar</div>
+      </div>
+
+      <!-- Luma speaking -->
+      <div style="background:#111820;border:1px solid #1e2d40;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:11px;color:#4a9eff;font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Luma is speaking</div>
+        <div style="font-size:13px;color:#ccc;line-height:1.5">"I can see Finder is open. I can read your sidebar, open folders, move files, and tell you what's here…"</div>
+      </div>
+
+      <!-- Step indicators -->
+      <div style="display:flex;gap:6px;justify-content:center;margin-bottom:14px">
+        <div style="width:6px;height:6px;border-radius:50%;background:#4a9eff"></div>
+        <div style="width:6px;height:6px;border-radius:50%;background:#4a9eff"></div>
+        <div style="width:22px;height:6px;border-radius:3px;background:#4a9eff"></div>
+        <div style="width:6px;height:6px;border-radius:50%;background:#2a2a30"></div>
+      </div>
+
+      <!-- User input prompt -->
+      <div style="background:#1a1a1f;border:1px solid #3a3a45;border-radius:10px;padding:12px 14px;text-align:center">
+        <div style="font-size:13px;color:#888">Hold <span style="background:#222;border:1px solid #444;border-radius:4px;padding:1px 6px;font-size:11px;color:#bbb;font-family:monospace">ctrl+opt</span> and say a command, or type below</div>
+        <div style="background:#111;border:1px solid #2a2a30;border-radius:8px;padding:8px 12px;margin-top:8px;color:#555;font-size:13px;text-align:left">Try asking me something…</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Does this two-screen flow and layout look right? The drag icon opens System Settings to the correct pane while you drag into it.</p>

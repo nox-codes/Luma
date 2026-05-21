@@ -1,0 +1,7 @@
+{"type":"server-started","port":61824,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:61824","screen_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/content","state_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/state"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/content/demo-question.html"}
+{"source":"user-event","type":"click","text":"B\n    \n      Dynamic demo using live screen context\n      Luma scans what's currently on screen, picks 2–3 real UI elements visible right now, narrates what it sees (\"I can see you have Finder open…\"), points the cursor at them, then invites a command. Different every time.","choice":"b","id":null,"timestamp":1779318905488}
+{"source":"user-event","type":"click","text":"B\n    \n      Dynamic demo using live screen context\n      Luma scans what's currently on screen, picks 2–3 real UI elements visible right now, narrates what it sees (\"I can see you have Finder open…\"), points the cursor at them, then invites a command. Different every time.","choice":"b","id":null,"timestamp":1779318983501}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/content/waiting-1.html"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/content/onboarding-demo.html"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/60748-1779318828/content/floating-input.html"}
