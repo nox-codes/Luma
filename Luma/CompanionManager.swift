@@ -860,6 +860,8 @@ final class CompanionManager: ObservableObject {
     func submitTextInput(_ text: String) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        // Text input counts as an interaction — reset the 30-second idle countdown.
+        idleTimer.reset()
         LumaLogger.log("[Luma] Text input submitted: \"\(trimmedText)\"")
         LumaAnalytics.trackUserMessageSent(transcript: trimmedText)
 
@@ -1991,6 +1993,8 @@ final class CompanionManager: ObservableObject {
 
         agentSessions.append(session)
         activeAgentSessionID = session.id
+        // Spawning an agent counts as an interaction — reset the 30-second idle countdown.
+        idleTimer.reset()
 
         // Observe this session's status changes so the dock refreshes automatically
         observeAgentSessionStatus(session)
