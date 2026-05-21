@@ -96,10 +96,10 @@ final class LumaPermissionDragPopup: NSObject {
     func show() {
         let contentView = PermissionDragPillView(permission: permission)
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 260, height: 64)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 400, height: 72)
 
         let dragPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 260, height: 64),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 72),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -114,11 +114,11 @@ final class LumaPermissionDragPopup: NSObject {
         dragPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         dragPanel.contentView = hostingView
 
-        // Position in the bottom-right area of the primary screen, above the dock
+        // Position at the bottom center of the primary screen, just above the dock
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
-            let panelX = screenFrame.maxX - 280
-            let panelY = screenFrame.minY + 80
+            let panelX = screenFrame.midX - 200   // centered (half of 400)
+            let panelY = screenFrame.minY + 24    // 24pt above dock/bottom
             dragPanel.setFrameOrigin(NSPoint(x: panelX, y: panelY))
         }
 
@@ -163,43 +163,54 @@ private struct PermissionDragPillView: View {
 
     let permission: LumaRequiredPermission
 
+    @State private var glowPulse: Bool = false
+
     var body: some View {
-        HStack(spacing: 12) {
-            // Drag source: Luma .app icon — acts as a real drag source providing
-            // the .app bundle URL, identical to dragging from Finder.
+        HStack(spacing: 14) {
+            // Drag source: Luma .app icon
             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                 .resizable()
-                .frame(width: 36, height: 36)
-                .cornerRadius(8)
+                .frame(width: 44, height: 44)
+                .cornerRadius(10)
                 .onDrag {
-                    // Provide the .app bundle URL so macOS System Settings accepts it
-                    // exactly as it would when dragging from Finder.
                     let appURL = URL(fileURLWithPath: Bundle.main.bundlePath)
                     return NSItemProvider(object: appURL as NSURL)
                 }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Drag to give permission")
-                    .font(.system(size: 12, weight: .semibold))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Drag Luma to grant permission")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
-                Text(permission.displayName)
+                Text(permission.displayName + " · Drag into the list in System Settings")
                     .font(.system(size: 11))
                     .foregroundColor(Color(hex: "#9BA39D"))
+                    .lineLimit(1)
             }
 
             Spacer()
+
+            // Arrow hint
+            Image(systemName: "arrow.right.circle.fill")
+                .font(.system(size: 20))
+                .foregroundColor(Color(hex: "#4caf50").opacity(0.7))
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color(hex: "#1A1C1A"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(hex: "#2E322E"), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color(hex: "#4caf50").opacity(glowPulse ? 0.7 : 0.25), lineWidth: 1.5)
                 )
+                .shadow(color: Color(hex: "#4caf50").opacity(glowPulse ? 0.35 : 0.1), radius: glowPulse ? 20 : 10, x: 0, y: 0)
         )
-        .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 4)
         .preferredColorScheme(.dark)
+        .onAppear {
+            // Pulse the glow to draw attention
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                glowPulse = true
+            }
+        }
     }
 }
