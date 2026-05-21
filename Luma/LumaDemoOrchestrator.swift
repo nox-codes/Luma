@@ -14,6 +14,8 @@
 //
 
 import AppKit
+import ApplicationServices
+import Combine
 import Foundation
 
 @MainActor
@@ -160,8 +162,9 @@ final class LumaDemoOrchestrator: ObservableObject {
 
     private func extractCGRect(from value: CFTypeRef) -> CGRect? {
         var rect = CGRect.zero
-        // AX frame values are stored as AXValue (kAXValueCGRectType)
-        guard let axValue = value as? AXValue else { return nil }
+        // AXValue is a CFTypeRef — conditional cast always succeeds (compiler warning), so use as!
+        // AXValueGetValue returns false if the value is not actually a CGRect type, which is our nil guard.
+        let axValue = value as! AXValue
         let success = AXValueGetValue(axValue, .cgRect, &rect)
         return success ? rect : nil
     }
