@@ -799,6 +799,48 @@ final class CompanionManager: ObservableObject {
         }
     }
 
+    /// Checks screen recording permission using both CGPreflight (fast) and an actual
+    /// SCShareableContent call (reliable). CGPreflightScreenCaptureAccess() can return false
+    /// even when permission is granted, so we fall back to an actual API call.
+    private func checkScreenRecordingPermissionReliably() async -> Bool {
+        // Fast path: CGPreflight says yes
+        if CGPreflightScreenCaptureAccess() { return true }
+        // Slow path: try an actual capture API call to verify true permission state
+        do {
+            _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Called by the polling timer. Identical to refreshAllPermissions() but uses
+    /// the async screen recording check so permission is detected reliably after
+    /// the user grants it in System Settings without restarting the app.
+    private func refreshPermissionsWithDeepScreenRecordingCheck() async {
+        let previouslyHadScreenRecording = hasScreenRecordingPermission
+
+        // Use the reliable async check for screen recording
+        hasScreenRecordingPermission = await checkScreenRecordingPermissionReliably()
+
+        // Re-read other permissions synchronously (these don't have the same caching issue)
+        hasAccessibilityPermission = WindowPositionManager.hasAccessibilityPermission()
+        hasMicrophonePermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        hasScreenContentPermission = hasScreenContentPermission || UserDefaults.standard.bool(forKey: "hasScreenContentPermission")
+
+        // Fire the reinit notification if screen recording just became available
+        if !previouslyHadScreenRecording && hasScreenRecordingPermission {
+            LumaAnalytics.trackPermissionGranted(permission: "screen_recording")
+            NotificationCenter.default.post(name: .lumaScreenRecordingPermissionGranted, object: nil)
+            LumaLogger.log("[Luma] Screen recording permission detected via deep check — reinitializing SCK")
+            NotificationCenter.default.post(
+                name: .lumaPermissionGranted,
+                object: nil,
+                userInfo: ["permission": LumaRequiredPermission.screenRecording.rawValue]
+            )
+        }
+    }
+
     /// Triggers the macOS screen content picker by performing a dummy
     /// screenshot capture. Once the user approves, we persist the grant
     /// so they're never asked again during onboarding.
@@ -858,15 +900,15 @@ final class CompanionManager: ObservableObject {
     }
 
     /// Polls all permissions frequently so the UI updates live after the
-    /// user grants them in System Settings. Screen Recording is the exception —
-    /// macOS requires an app restart for that one to take effect.
+    /// user grants them in System Settings. Uses the deep async screen recording
+    /// check so permission is detected without requiring an app restart.
     private func startPermissionPolling() {
         accessibilityCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             #if DEBUG
             EnergyDebugLogger.timerFired("permissionPoll@1.5s")
             #endif
             Task { @MainActor [weak self] in
-                self?.refreshAllPermissions()
+                await self?.refreshPermissionsWithDeepScreenRecordingCheck()
             }
         }
     }
