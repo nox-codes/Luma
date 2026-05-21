@@ -352,22 +352,8 @@ final class CompanionManager: ObservableObject {
             }
         }
 
-        // Initialize agent session system only if agent mode is enabled
-        if isAgentModeEnabled {
-            // Restore persisted sessions from previous app launch, or create a default one
-            restorePersistedAgentSessions()
-            if agentSessions.isEmpty {
-                ensureDefaultAgentSession()
-            }
-        }
-        // Only register hotkeys when at least one agent session exists.
-        // With zero sessions the switch/cycle/spawn-nth hotkeys are meaningless
-        // and two global NSEvent monitors (local + global keyDown) fire on every
-        // keystroke system-wide. They are re-registered in createAndSelectNewAgentSession
-        // the moment the first session is created.
-        if !agentSessions.isEmpty {
-            AgentHotkeyHandler.shared.startMonitoring(companionManager: self)
-        }
+        // Agent sessions are spawned on demand by the intent classifier or explicit
+        // user voice commands. No sessions are created or restored at launch.
 
         // Listen for agent task completion to speak results and update overlay
         agentTaskCompletedObserver = NotificationCenter.default.addObserver(
