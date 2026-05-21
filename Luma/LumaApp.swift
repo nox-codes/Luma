@@ -64,7 +64,8 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
             menuBarPanelManager?.showPanelOnLaunch()
         }
         registerAsLoginItemIfNeeded()
-        // startSparkleUpdater()
+        LumaUpdateManager.shared.startChecking()
+        // startSparkleUpdater()  — uncomment once GitHub Actions appcast workflow is set up
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -1,30 +1,41 @@
 <?xml version="1.0" standalone="yes"?>
+<!--
+  Luma appcast — used by Sparkle (Options A/B, currently dormant).
+  To activate: uncomment startSparkleUpdater() in LumaApp.swift,
+  generate a fresh EdDSA keypair, and add entries below per release.
+
+  Per-release workflow (once GitHub Actions is set up):
+    1. Build and notarize the .dmg
+    2. Sign it:  .build/release/sign_update Luma.dmg <private_key>
+    3. Prepend a new <item> block below with the output signature, URL, and size
+    4. Commit appcast.xml to main — Sparkle polls this URL automatically
+
+  Generate keys (one-time):
+    .build/release/generate_keys
+    → Public key  → Info.plist SUPublicEDKey
+    → Private key → GitHub secret SPARKLE_PRIVATE_KEY (never commit)
+-->
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
-        <title>makesomething</title>
+        <title>Luma</title>
+
+        <!-- ── v0.5.2 (Beta) ──────────────────────────────────────────────── -->
         <item>
-            <title>2.0</title>
-            <pubDate>Sat, 14 Mar 2026 09:56:02 -0700</pubDate>
-            <sparkle:version>11</sparkle:version>
-            <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
+            <title>Luma v0.5.2 (Beta)</title>
+            <pubDate>Wed, 21 May 2026 00:00:00 -0700</pubDate>
+            <sparkle:version>52</sparkle:version>
+            <sparkle:shortVersionString>0.5.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/julianjear/makesomething-mac-app/releases/download/v2.0/makesomething.dmg" length="11852050" type="application/octet-stream" sparkle:edSignature="Y9o+YBln/BXAwYeJLuGV0E7B9q9/+kuhhFlNRyekZuYLPwbTYoL7aUYhurAQFfmiSuWuCUNHKXgtzaKCyaMGCQ=="/>
+            <sparkle:releaseNotesLink>https://github.com/nox-codes/Luma/releases/tag/v0.5.2</sparkle:releaseNotesLink>
+            <!--
+            Uncomment and fill in once Sparkle signing is set up:
+            <enclosure
+              url="https://github.com/nox-codes/Luma/releases/download/v0.5.2/Luma.dmg"
+              length="REPLACE_WITH_BYTE_LENGTH"
+              type="application/octet-stream"
+              sparkle:edSignature="REPLACE_WITH_EDDSA_SIGNATURE"/>
+            -->
         </item>
-        <item>
-            <title>1.9</title>
-            <pubDate>Sat, 14 Mar 2026 08:33:19 -0700</pubDate>
-            <sparkle:version>10</sparkle:version>
-            <sparkle:shortVersionString>1.9</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/julianjear/makesomething-mac-app/releases/download/v1.9/makesomething.dmg" length="11851619" type="application/octet-stream" sparkle:edSignature="l0OE/1XAsVgbyyP0vty+50oqzkTeR1yTRsuKtCU/m8UHduT/9cafKI/x1Vy5p8RW2t5JKDFIqmar/jRf6NRuDg=="/>
-        </item>
-        <item>
-            <title>1.8</title>
-            <pubDate>Wed, 11 Mar 2026 10:17:12 -0700</pubDate>
-            <sparkle:version>9</sparkle:version>
-            <sparkle:shortVersionString>1.8</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/julianjear/makesomething-mac-app/releases/download/v1.8/makesomething.dmg" length="11489099" type="application/octet-stream" sparkle:edSignature="K7n75BUbzhzTbrnYDQDcsmMQGb3bEjvl5yxSIdBGtbanNWrEUym2sozah5hGkAQ0sLShrPhx8FDBunmd2T3rAw=="/>
-        </item>
+
     </channel>
 </rss>
