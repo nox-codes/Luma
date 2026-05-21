@@ -16,6 +16,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 /// The three permissions Luma requires.
@@ -181,7 +182,8 @@ private struct PermissionDragPillView: View {
                 Text("Drag Luma to grant permission")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
-                Text(permission.displayName + " · Drag into the list in System Settings")
+                let subtitleText = permission.displayName + " · Drag into the list in System Settings"
+                Text(subtitleText)
                     .font(.system(size: 11))
                     .foregroundColor(Color(hex: "#9BA39D"))
                     .lineLimit(1)

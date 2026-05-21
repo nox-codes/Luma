@@ -46,7 +46,7 @@ struct OnboardingWizardView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Bottom nav: back + step counter. Only visible on middle steps (not welcome or done).
-                if currentStep > 0 && currentStep < 5 {
+                if currentStep > 0 && currentStep < 6 {
                     bottomNavigationRow
                 }
             }
@@ -95,7 +95,7 @@ struct OnboardingWizardView: View {
     }
 
     /// Human-readable sidebar step names — one per wizard step (indices 0–6).
-    private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Permissions", "Done"]
+    private let onboardingStepNames = ["Welcome", "Account", "Security", "API Setup", "Permissions", "Demo", "Done"]
 
     /// Renders a single sidebar step row with the correct visual state.
     private func onboardingSidebarStepRow(stepIndex: Int, stepName: String) -> some View {
@@ -181,6 +181,8 @@ struct OnboardingWizardView: View {
                     onAllPermissionsGranted: advanceToNextStep
                 )
             case 5:
+                OnboardingDemoStep(onSkipOrContinue: advanceToNextStep)
+            case 6:
                 OnboardingDoneStep(onStartLearning: completeOnboarding)
             default:
                 // Should never be reached, but prevents a blank view if state is invalid
@@ -207,7 +209,7 @@ struct OnboardingWizardView: View {
 
             // Step counter — "Step N of 5" where N is the current middle step (1–4).
             // The wizard has 6 steps total (0–5); welcome (0) and done (5) hide this bar.
-            Text("Step \(currentStep) of 5")
+            Text("Step \(currentStep) of 6")
                 .font(.system(size: 11))
                 .foregroundColor(Color(hex: "#555D58"))
         }

@@ -7,6 +7,7 @@
 //  LumaFloatingInputWindowManager to size the panel correctly.
 //
 
+import Combine
 import Foundation
 
 /// Identifies which visual style the floating input bubble uses.

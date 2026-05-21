@@ -2,152 +2,149 @@
 //  OnboardingDemoStep.swift
 //  Luma
 //
-//  Wizard step 5: the interactive demo. Shown only after all three permissions
-//  are granted (enforced by OnboardingPermissionsStep upstream).
+//  Wizard step 5: plays a local demo video from the app bundle.
 //
-//  LumaDemoOrchestrator drives the scan → narrate → point → invite sequence.
-//  The user can submit a real text command to complete the demo; the command
-//  goes through the normal classifyAndRouteInput() pipeline.
+//  To add the video:
+//  1. Drag your video file into the Xcode project (any target membership).
+//  2. Name the resource "LumaDemo" with extension "mp4" (or adjust the
+//     resource name/extension constants below if you use a different name).
+//
+//  The user can skip the video at any time or wait for it to finish —
+//  both paths call onSkipOrContinue() to advance to the Done step.
 //
 
+import AVKit
 import SwiftUI
 
 @MainActor
 struct OnboardingDemoStep: View {
 
-    @ObservedObject var companionManager: CompanionManager
-    var onDemoComplete: () -> Void
+    /// Called when the user taps "Continue" or "Skip" — advances to Done step.
+    var onSkipOrContinue: () -> Void
 
-    @StateObject private var orchestrator = LumaDemoOrchestrator()
-    @State private var userTextInput: String = ""
-    @State private var hasSubmittedCommand: Bool = false
+    // MARK: - State
+
+    /// The AVPlayer driving the demo video. Nil when the video file is not found in the bundle.
+    @State private var videoPlayer: AVPlayer? = nil
+
+    // MARK: - Constants
+
+    /// Bundle resource name (without extension) for the demo video.
+    private let videoBundleResourceName = "LumaDemo"
+    /// File extension of the demo video in the bundle.
+    private let videoBundleResourceExtension = "mp4"
+
+    // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("Meet Luma")
+                Text("See Luma in action")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(Color(hex: "#ECEEED"))
-                Text("Watch what Luma can see, then try a command.")
+                Text("Watch the demo, then click Continue when you're ready.")
                     .font(.system(size: 13))
                     .foregroundColor(Color(hex: "#9BA39D"))
             }
             .padding(.horizontal, 40)
             .padding(.top, 36)
-            .padding(.bottom, 24)
+            .padding(.bottom, 20)
 
-            // Status area — shows what Luma is currently saying
-            if !orchestrator.spokenText.isEmpty {
-                HStack(alignment: .top, spacing: 10) {
-                    Circle()
-                        .fill(Color(hex: "#2563EB"))
-                        .frame(width: 8, height: 8)
-                        .padding(.top, 5)
-                    Text(orchestrator.spokenText)
-                        .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "#ECEEED"))
-                        .lineLimit(4)
-                        .fixedSize(horizontal: false, vertical: true)
+            // Video player area
+            Group {
+                if let player = videoPlayer {
+                    VideoPlayer(player: player)
+                        .frame(height: 260)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color(hex: "#2E322E"), lineWidth: 1)
+                        )
+                } else {
+                    // Video file not yet added to the bundle — show a placeholder
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(hex: "#1A1C1A"))
+                        .frame(height: 260)
+                        .overlay(
+                            VStack(spacing: 8) {
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 36))
+                                    .foregroundColor(Color(hex: "#555D58"))
+                                Text("Add LumaDemo.mp4 to the Xcode project")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color(hex: "#555D58"))
+                                    .multilineTextAlignment(.center)
+                            }
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color(hex: "#2E322E"), lineWidth: 1)
+                        )
                 }
-                .padding(.horizontal, 40)
-                .padding(.bottom, 20)
             }
+            .padding(.horizontal, 40)
 
             Spacer()
 
-            // User input row — only shown once the orchestrator reaches the .inviting phase
-            if case .inviting = orchestrator.phase {
-                VStack(spacing: 10) {
-                    Text("Try giving me a command")
+            // Bottom actions
+            VStack(spacing: 8) {
+                Button(action: onSkipOrContinue) {
+                    Text("Continue →")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(hex: "#ECEEED"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(hex: "#2563EB"))
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+
+                Button(action: onSkipOrContinue) {
+                    Text("Skip")
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "#555D58"))
-
-                    HStack(spacing: 10) {
-                        TextField("Type a command…", text: $userTextInput)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 13))
-                            .foregroundColor(Color(hex: "#ECEEED"))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(hex: "#1A1C1A"))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(Color(hex: "#2E322E"), lineWidth: 1)
-                                    )
-                            )
-                            .onSubmit { submitDemoCommand() }
-
-                        Button(action: submitDemoCommand) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(Color(hex: "#141614"))
-                                .frame(width: 30, height: 30)
-                                .background(Color.white)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(userTextInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasSubmittedCommand)
-                        .onHover { isHovering in
-                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                        }
-                    }
-
-                    Text("Or hold ⌃⌥ and speak")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "#555D58"))
                 }
-                .padding(.horizontal, 40)
-                .padding(.bottom, 28)
-            }
-
-            // Completion state — shown after the user's command executes
-            if case .complete = orchestrator.phase {
-                VStack(spacing: 12) {
-                    Text("You're all set!")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(hex: "#34D399"))
-
-                    Button(action: onDemoComplete) {
-                        Text("Finish setup →")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(Color(hex: "#ECEEED"))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(hex: "#2563EB"))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isHovering in
-                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
+                .buttonStyle(.plain)
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
-                .padding(.horizontal, 40)
-                .padding(.bottom, 28)
             }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 28)
         }
         .onAppear {
-            orchestrator.start(companionManager: companionManager)
+            setupVideoPlayer()
         }
         .onDisappear {
-            // Cancel the demo sequence if the user navigates back or closes the wizard
-            orchestrator.cancel()
+            tearDownVideoPlayer()
         }
     }
 
-    private func submitDemoCommand() {
-        let command = userTextInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty, !hasSubmittedCommand else { return }
-        hasSubmittedCommand = true
-        orchestrator.markExecuting()
-        // Route through the full intent classifier pipeline — the user's real first command
-        Task { @MainActor in
-            await companionManager.classifyAndRouteInput(command)
-            orchestrator.markComplete()
+    // MARK: - Video Lifecycle
+
+    private func setupVideoPlayer() {
+        guard let videoURL = Bundle.main.url(
+            forResource: videoBundleResourceName,
+            withExtension: videoBundleResourceExtension
+        ) else {
+            // Video file not in bundle yet — leave videoPlayer nil so the placeholder shows
+            return
         }
+
+        let player = AVPlayer(url: videoURL)
+        player.play()
+        videoPlayer = player
+    }
+
+    private func tearDownVideoPlayer() {
+        videoPlayer?.pause()
+        videoPlayer = nil
     }
 }
