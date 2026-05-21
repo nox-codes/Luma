@@ -673,6 +673,7 @@ final class CompanionManager: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             floatingInputTriggeredObserver = nil
         }
+        LumaFloatingInputWindowManager.shared.onSendText = nil
         LumaDoubleTapModifierDetector.shared.stop()
 
         currentResponseTask?.cancel()

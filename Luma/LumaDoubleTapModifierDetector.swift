@@ -16,6 +16,10 @@ extension Notification.Name {
     static let lumaFloatingInputTriggered = Notification.Name("lumaFloatingInputTriggered")
 }
 
+/// Threading contract: `start()` must be called on the main thread.
+/// `NSEvent.addGlobalMonitorForEvents` delivers callbacks on the thread that
+/// added the monitor, so all `handleFlagsChanged` mutations run on main as long
+/// as `start()` is called from a `@MainActor` context (e.g. CompanionManager).
 final class LumaDoubleTapModifierDetector {
 
     static let shared = LumaDoubleTapModifierDetector()
