@@ -28,18 +28,30 @@ final class FloatingPanelState: ObservableObject {
     /// does not notify SwiftUI.
     @Published var draft: String = ""
 
-    /// Response text with all internal [POINT:...] navigation tags stripped.
-    /// Always use this for display — the raw response may contain tags that look
-    /// like "[POINT:none]" or "[POINT:x,y:label:screen0]".
+    /// Response text with all internal tags stripped, safe to display to the user.
+    /// Removes:
+    ///   - [POINT:...] navigation tags (e.g. "[POINT:x,y:label:screen0]")
+    ///   - <STEPS>...</STEPS> JSON blocks used by the walkthrough pipeline
     var displayResponse: String {
         guard !response.isEmpty else { return "" }
-        // Pattern matches [POINT:...] tags with any content between brackets
-        guard let regex = try? NSRegularExpression(pattern: #"\[POINT:[^\]]*\]"#) else {
-            return response
+
+        var text = response
+
+        // Strip <STEPS>...</STEPS> blocks including all content between them.
+        if let stepsRegex = try? NSRegularExpression(
+            pattern: #"<STEPS>[\s\S]*?</STEPS>"#
+        ) {
+            let fullRange = NSRange(text.startIndex..., in: text)
+            text = stepsRegex.stringByReplacingMatches(in: text, range: fullRange, withTemplate: "")
         }
-        let range = NSRange(response.startIndex..., in: response)
-        return regex.stringByReplacingMatches(in: response, range: range, withTemplate: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Strip [POINT:...] navigation tags.
+        if let pointRegex = try? NSRegularExpression(pattern: #"\[POINT:[^\]]*\]"#) {
+            let fullRange = NSRange(text.startIndex..., in: text)
+            text = pointRegex.stringByReplacingMatches(in: text, range: fullRange, withTemplate: "")
+        }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private init() {}

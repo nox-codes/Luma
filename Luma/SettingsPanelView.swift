@@ -1381,6 +1381,7 @@ private struct GeneralTabView: View {
                 dangerZoneSection
             }
             .padding(DS.Spacing.xl)
+            .padding(.bottom, DS.Spacing.xl)
         }
         // PIN entry sheet (set or change)
         .sheet(isPresented: $isShowingPINEntrySheet) {
@@ -1684,7 +1685,7 @@ private struct GeneralTabView: View {
     private var aboutSection: some View {
         // Centered About block with app version and copyright
         VStack(spacing: DS.Spacing.xs) {
-            Text("Luma v1.0")
+            Text("Luma v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
 

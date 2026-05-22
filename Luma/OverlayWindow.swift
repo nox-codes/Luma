@@ -204,7 +204,7 @@ struct BlueCursorView: View {
             if isCursorOnThisScreen && showWelcome && !welcomeText.isEmpty {
                 Text(welcomeText)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(DS.Colors.textPrimary)
+                    .foregroundColor(DS.Colors.textOnAccent)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
@@ -234,7 +234,7 @@ struct BlueCursorView: View {
             if buddyNavigationMode == .pointingAtTarget && !navigationBubbleText.isEmpty {
                 Text(navigationBubbleText)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(DS.Colors.textPrimary)
+                    .foregroundColor(DS.Colors.textOnAccent)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 8)
@@ -276,7 +276,7 @@ struct BlueCursorView: View {
             if !agentSummaryBubbleText.isEmpty {
                 Text(lumaMarkdown(agentSummaryTypedText))
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(DS.Colors.textPrimary)
+                    .foregroundColor(DS.Colors.textOnAccent)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 8)
