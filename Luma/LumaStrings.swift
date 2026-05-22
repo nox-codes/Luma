@@ -67,7 +67,7 @@ enum LumaStrings {
         static let skipStep             = "Skip this step"
         /// Format with String(format:) — arguments are current step and total steps.
         static let stepOf               = "Step %d of %d"
-        static let complete             = "You did it! 🎉"
+        static let complete             = "You did it!"
     }
 
     // MARK: Companion

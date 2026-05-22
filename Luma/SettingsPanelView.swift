@@ -18,7 +18,7 @@ struct SettingsPanelView: View {
 
     // Triggers re-render whenever the user changes the accent theme, so the Done
     // button and sidebar selected states immediately reflect the new accent color.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     // Observe singletons so changes in each tab update the UI immediately.
     @StateObject private var accountManager = AccountManager.shared
@@ -45,7 +45,7 @@ struct SettingsPanelView: View {
                     .foregroundColor(DS.Colors.textOnAccent)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 7)
-                    .background(Capsule().fill(DS.Colors.accent))
+                    .background(Rectangle().fill(DS.Colors.accent))
                     .onHover { hovering in
                         if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
@@ -53,6 +53,10 @@ struct SettingsPanelView: View {
                 .padding(.leading, 20)
                 .padding(.trailing, 12)
                 .padding(.vertical, 10)
+                // WindowDragHandle sits behind all controls so clicking the empty
+                // area of the top bar drags the window, while the Done button and
+                // any other interactive views above it still fire normally.
+                .background(WindowDragHandle())
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -159,9 +163,16 @@ struct SettingsPanelView: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Rectangle()
                     .fill(isSelected ? DS.Colors.accentSubtle : .clear)
             )
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle()
+                        .fill(DS.Colors.accent)
+                        .frame(width: 2)
+                }
+            }
         }
         .buttonStyle(.plain)
         .onHover { isHovering in
@@ -237,6 +248,9 @@ private struct AccountTabView: View {
     @ObservedObject var profileManager: ProfileManager
     @ObservedObject var pinManager:     PINManager
 
+    // Forces re-render when the accent theme changes so DS.Colors.accent is fresh.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
+
     /// Draft of the display name being edited in the text field.
     @State private var editedDisplayName: String = ""
 
@@ -292,6 +306,7 @@ private struct AccountTabView: View {
 
                 TextField("Display name", text: $editedDisplayName)
                     .textFieldStyle(.plain)
+                    .tint(DS.Colors.accent)
                     .font(.system(size: 13))
                     .foregroundColor(DS.Colors.textPrimary)
                     .padding(DS.Spacing.sm)
@@ -366,7 +381,7 @@ private struct APIProfilesTabView: View {
     @ObservedObject var profileManager: ProfileManager
 
     // Triggers re-render so the "Add Profile" button accent color updates immediately.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     /// Whether the "Add Profile" inline form is expanded.
     @State private var isAddProfileFormExpanded: Bool = false
@@ -472,7 +487,7 @@ private struct APIProfilesTabView: View {
 private struct ProfileRowView: View {
 
     // Triggers re-render so the checkmark and "Set Default" button reflect the new accent immediately.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     let profile: LumaAPIProfile
     let totalProfileCount: Int
@@ -579,7 +594,7 @@ private struct ProfileRowView: View {
 private struct ProfileFormView: View {
 
     // Triggers re-render so "Test Connection" and "Save Profile" accent colors update immediately.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     enum FormMode { case add, edit }
 
@@ -616,6 +631,7 @@ private struct ProfileFormView: View {
                     .foregroundColor(DS.Colors.textSecondary)
                 TextField("e.g. Work - OpenRouter", text: $profileName)
                     .textFieldStyle(.plain)
+                    .tint(DS.Colors.accent)
                     .font(.system(size: 13))
                     .foregroundColor(DS.Colors.textPrimary)
                     .padding(DS.Spacing.sm)
@@ -650,6 +666,7 @@ private struct ProfileFormView: View {
                         .foregroundColor(DS.Colors.textSecondary)
                     TextField("https://your-endpoint.com/v1", text: $customBaseURL)
                         .textFieldStyle(.plain)
+                        .tint(DS.Colors.accent)
                         .font(.system(size: 13))
                         .foregroundColor(DS.Colors.textPrimary)
                         .padding(DS.Spacing.sm)
@@ -674,11 +691,13 @@ private struct ProfileFormView: View {
                     if isAPIKeyVisible {
                         TextField("Paste API key here", text: $apiKeyInput)
                             .textFieldStyle(.plain)
+                            .tint(DS.Colors.accent)
                             .font(.system(size: 13))
                             .foregroundColor(DS.Colors.textPrimary)
                     } else {
                         SecureField("Paste API key here", text: $apiKeyInput)
                             .textFieldStyle(.plain)
+                            .tint(DS.Colors.accent)
                             .font(.system(size: 13))
                             .foregroundColor(DS.Colors.textPrimary)
                     }
@@ -726,11 +745,11 @@ private struct ProfileFormView: View {
                     ProgressView()
                         .scaleEffect(0.6)
                 case .success:
-                    Text("✓ Connected")
+                    Label("Connected", systemImage: "checkmark")
                         .font(.system(size: 11))
                         .foregroundColor(DS.Colors.success)
                 case .failure(let reason):
-                    Text("✗ Failed: \(reason)")
+                    Label("Failed: \(reason)", systemImage: "xmark")
                         .font(.system(size: 11))
                         .foregroundColor(DS.Colors.destructive)
                 }
@@ -889,7 +908,7 @@ private struct ModelTabView: View {
     @ObservedObject var profileManager: ProfileManager
 
     // Triggers re-render so the selected model row highlight and "Save" button update immediately.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     /// Text typed in the search field — filters all three provider sections simultaneously.
     @State private var searchText: String = ""
@@ -955,6 +974,7 @@ private struct ModelTabView: View {
                             .foregroundColor(DS.Colors.textTertiary)
                         TextField("Search models…", text: $searchText)
                             .textFieldStyle(.plain)
+                            .tint(DS.Colors.accent)
                             .font(.system(size: 13))
                             .foregroundColor(DS.Colors.textPrimary)
                     }
@@ -985,6 +1005,7 @@ private struct ModelTabView: View {
                         HStack(spacing: 8) {
                             TextField("e.g. google/gemini-2.5-flash:free", text: $customModelText)
                                 .textFieldStyle(.plain)
+                                .tint(DS.Colors.accent)
                                 .font(.system(size: 13))
                                 .foregroundColor(DS.Colors.textPrimary)
                                 .onSubmit { saveCustomModel(activeProfile: activeProfile) }
@@ -1115,7 +1136,7 @@ private struct ModelTabView: View {
 @MainActor
 private struct CustomizationTabView: View {
 
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.white.rawValue
     @StateObject private var floatingStyleManager = FloatingInputStyleManager.shared
 
     var body: some View {
@@ -1159,24 +1180,18 @@ private struct CustomizationTabView: View {
             accentThemeRaw = theme.rawValue
         } label: {
             VStack(spacing: 7) {
-                Circle()
+                Rectangle()
                     .fill(theme.accent)
                     .frame(width: 36, height: 36)
                     .overlay(
-                        Circle()
-                            .stroke(DS.Colors.background, lineWidth: 2)
-                            .opacity(isSelected ? 1 : 0)
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(theme.accent, lineWidth: 2)
-                            .padding(-4)
-                            .opacity(isSelected ? 1 : 0)
+                        Rectangle()
+                            .stroke(isSelected ? theme.accent : DS.Colors.borderSubtle, lineWidth: isSelected ? 2 : 1)
+                            .padding(isSelected ? -4 : 0)
                     )
                     .animation(.easeInOut(duration: 0.15), value: isSelected)
 
-                Text(theme.title)
-                    .font(.system(size: 10))
+                Text(theme.title.uppercased())
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textTertiary)
             }
         }
@@ -1214,15 +1229,15 @@ private struct CustomizationTabView: View {
             floatingStyleManager.currentStyle = style
         } label: {
             HStack(spacing: 14) {
-                // Selection indicator circle
+                // Selection indicator square
                 ZStack {
-                    Circle()
+                    Rectangle()
                         .stroke(isSelected ? DS.Colors.accent : DS.Colors.textTertiary.opacity(0.4), lineWidth: 1.5)
-                        .frame(width: 18, height: 18)
+                        .frame(width: 14, height: 14)
                     if isSelected {
-                        Circle()
+                        Rectangle()
                             .fill(DS.Colors.accent)
-                            .frame(width: 10, height: 10)
+                            .frame(width: 8, height: 8)
                     }
                 }
 
@@ -1243,12 +1258,12 @@ private struct CustomizationTabView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Rectangle()
                     .fill(isSelected ? DS.Colors.accentSubtle : DS.Colors.surface2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(isSelected ? DS.Colors.accent.opacity(0.4) : Color.clear, lineWidth: 1)
-                    )
+            )
+            .overlay(
+                Rectangle()
+                    .stroke(isSelected ? DS.Colors.accent.opacity(0.6) : DS.Colors.borderSubtle, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1260,31 +1275,28 @@ private struct CustomizationTabView: View {
 
     @ViewBuilder
     private func miniPreview(for style: FloatingInputStyle) -> some View {
-        let accent = Color(hex: "#4caf50")
+        let accent = Color(hex: "#ffffff")
         switch style {
         case .pillClean:
-            Capsule()
+            Rectangle()
                 .fill(Color(hex: "#141614"))
-                .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
+                .overlay(Rectangle().stroke(accent.opacity(0.3), lineWidth: 1))
                 .frame(width: 80, height: 20)
                 .overlay(
                     HStack(spacing: 4) {
-                        Circle().fill(accent).frame(width: 6, height: 6)
-                        RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#555D58")).frame(width: 36, height: 3)
+                        Rectangle().fill(accent).frame(width: 5, height: 5)
+                        Rectangle().fill(Color(hex: "#555D58")).frame(width: 36, height: 2)
                     }
                     .padding(.leading, 8)
                     , alignment: .leading
                 )
 
         case .widerCard:
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            Rectangle()
                 .fill(Color(hex: "#0E1210"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(
-                            LinearGradient(colors: [accent.opacity(0.6), accent.opacity(0.1)], startPoint: .leading, endPoint: .trailing),
-                            lineWidth: 1
-                        )
+                    Rectangle()
+                        .stroke(accent.opacity(0.4), lineWidth: 1)
                 )
                 .frame(width: 88, height: 22)
                 .overlay(
@@ -1293,7 +1305,7 @@ private struct CustomizationTabView: View {
                             .font(.system(size: 7, weight: .semibold, design: .monospaced))
                             .foregroundColor(Color(hex: "#555D58"))
                         Rectangle().fill(Color(hex: "#2E322E")).frame(width: 0.5, height: 10)
-                        RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#555D58")).frame(width: 28, height: 3)
+                        Rectangle().fill(Color(hex: "#555D58")).frame(width: 28, height: 2)
                     }
                     .padding(.horizontal, 6)
                 )
@@ -1301,17 +1313,16 @@ private struct CustomizationTabView: View {
         case .cursorAnchored:
             VStack(spacing: 0) {
                 HStack {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    Rectangle()
                         .fill(accent)
-                        .frame(width: 16, height: 5)
-                        .shadow(color: accent.opacity(0.5), radius: 2)
+                        .frame(width: 16, height: 4)
                     Spacer()
                 }
                 .padding(.leading, 8)
-                UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 6, bottomTrailingRadius: 6, topTrailingRadius: 6, style: .continuous)
+                Rectangle()
                     .fill(Color(hex: "#141614"))
                     .overlay(
-                        UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 6, bottomTrailingRadius: 6, topTrailingRadius: 6, style: .continuous)
+                        Rectangle()
                             .stroke(accent.opacity(0.35), lineWidth: 0.5)
                     )
                     .frame(width: 88, height: 18)
@@ -1342,7 +1353,7 @@ private struct GeneralTabView: View {
     // MARK: Accent Theme
     // Stored in the same UserDefaults key that LumaAccentTheme.current reads from.
     // Changing this live-updates all DS.Colors.accent / DS.Colors.accentText / overlayCursorBlue calls.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.white.rawValue
 
     // MARK: PIN sheet state
     @State private var isShowingPINEntrySheet: Bool = false
@@ -1413,25 +1424,18 @@ private struct GeneralTabView: View {
             accentThemeRaw = theme.rawValue
         } label: {
             VStack(spacing: 7) {
-                Circle()
+                Rectangle()
                     .fill(theme.accent)
                     .frame(width: 36, height: 36)
-                    // Ring: bg gap → accent ring when selected
                     .overlay(
-                        Circle()
-                            .stroke(DS.Colors.background, lineWidth: 2)
-                            .opacity(isSelected ? 1 : 0)
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(theme.accent, lineWidth: 2)
-                            .padding(-4)
-                            .opacity(isSelected ? 1 : 0)
+                        Rectangle()
+                            .stroke(isSelected ? theme.accent : DS.Colors.borderSubtle, lineWidth: isSelected ? 2 : 1)
+                            .padding(isSelected ? -4 : 0)
                     )
                     .animation(.easeInOut(duration: 0.15), value: isSelected)
 
-                Text(theme.title)
-                    .font(.system(size: 10))
+                Text(theme.title.uppercased())
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textTertiary)
             }
         }
@@ -1455,7 +1459,7 @@ private struct GeneralTabView: View {
                     .font(.system(size: 13))
                     .foregroundColor(DS.Colors.textPrimary)
             }
-            .toggleStyle(.switch)
+            .toggleStyle(RetroToggleStyle())
             .onChange(of: launchAtLoginEnabled) { newValue in
                 toggleLaunchAtLogin(enabled: newValue)
             }
@@ -1770,6 +1774,9 @@ private struct GeneralTabView: View {
 @MainActor
 private struct VoiceSettingsTabView: View {
 
+    // Forces re-render when the accent theme changes so DS.Colors.accent is fresh.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
+
     // Voice settings backed by UserDefaults via the same keys NativeTTSClient reads.
     @AppStorage(NativeTTSClient.voiceGenderKey)      private var voiceGender: String  = "female"
     @AppStorage(NativeTTSClient.voiceNameKey)        private var voiceName: String    = ""
@@ -1895,16 +1902,16 @@ private struct VoiceSettingsTabView: View {
         } label: {
             Text(voice.name)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isSelected ? .white : DS.Colors.textSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .foregroundColor(isSelected ? DS.Colors.textOnAccent : DS.Colors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .background(
-                    Capsule()
+                    Rectangle()
                         .fill(isSelected ? DS.Colors.accent : DS.Colors.surface2)
                 )
                 .overlay(
-                    Capsule()
-                        .stroke(isSelected ? DS.Colors.accentHover : DS.Colors.borderSubtle, lineWidth: 1)
+                    Rectangle()
+                        .stroke(isSelected ? DS.Colors.accent : DS.Colors.borderSubtle, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -1949,8 +1956,7 @@ private struct VoiceSettingsTabView: View {
                 }
             }
 
-            Slider(value: value, in: range)
-                .tint(sliderColor)
+            RetroSlider(value: value, range: range, tintColor: sliderColor)
         }
     }
 
@@ -1994,9 +2000,8 @@ private struct VoiceSettingsTabView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Toggle("", isOn: isOn)
-                .toggleStyle(.switch)
+                .toggleStyle(RetroToggleStyle())
                 .labelsHidden()
-                .tint(DS.Colors.accent)
         }
         .padding(.vertical, 2)
     }
@@ -2022,7 +2027,7 @@ private struct VoiceSettingsTabView: View {
                 HStack(spacing: 5) {
                     Image(systemName: isPreviewPlaying ? "speaker.wave.3.fill" : "play.fill")
                         .font(.system(size: 11))
-                    Text(isPreviewPlaying ? "Playing…" : "▶ Play")
+                    Text(isPreviewPlaying ? "Playing…" : "Play")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundColor(DS.Colors.textSecondary)
@@ -2030,10 +2035,9 @@ private struct VoiceSettingsTabView: View {
                 .padding(.vertical, 6)
                 .background(DS.Colors.surface2)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    Rectangle()
                         .stroke(DS.Colors.borderSubtle, lineWidth: 1)
                 )
-                .cornerRadius(8)
             }
             .buttonStyle(.plain)
             .disabled(isPreviewPlaying)
@@ -2121,6 +2125,9 @@ private struct FlowLayout: Layout {
 @MainActor
 private struct AgentModeTabView: View {
 
+    // Forces re-render when the accent theme changes so DS.Colors.accent is fresh.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
+
     @StateObject private var agentSettingsManager = AgentSettingsManager.shared
     @StateObject private var agentRuntimeManager = AgentRuntimeManager.shared
 
@@ -2162,8 +2169,7 @@ private struct AgentModeTabView: View {
             Toggle("Agent Mode", isOn: $agentSettingsManager.isAgentModeEnabled)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(DS.Colors.textPrimary)
-                .toggleStyle(.switch)
-                .tint(DS.Colors.accent)
+                .toggleStyle(RetroToggleStyle())
 
             Text("Enable the agent panel section and HUD dashboard for autonomous task execution.")
                 .font(.system(size: 11))
@@ -2336,6 +2342,9 @@ private struct AgentProfileRowView: View {
     var onUpdateName:  (String) -> Void
     var onDelete:      () -> Void
 
+    // Forces re-render when the accent theme changes so DS.Colors.accent is fresh.
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
+
     @State private var editedName: String = ""
     @State private var selectedModel: AgentModel = .claudeSonnet
 
@@ -2345,6 +2354,7 @@ private struct AgentProfileRowView: View {
             // Editable agent name
             TextField("Agent name", text: $editedName)
                 .textFieldStyle(.plain)
+                .tint(DS.Colors.accent)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(DS.Colors.textPrimary)
                 .frame(maxWidth: 120)

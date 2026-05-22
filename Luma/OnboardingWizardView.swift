@@ -104,30 +104,30 @@ struct OnboardingWizardView: View {
         let isStepFuture = stepIndex > currentStep
 
         return HStack(spacing: 10) {
-            // Indicator circle: green + check when done, blue + number when active, dim when future.
+            // Indicator square: check when done, filled when active, dim when future.
             ZStack {
-                Circle()
+                Rectangle()
                     .fill(isStepDone
                           ? Color(hex: "#34D399")
-                          : isStepActive ? Color(hex: "#2563EB") : Color(hex: "#282B28"))
-                    .frame(width: 22, height: 22)
+                          : isStepActive ? Color(hex: "#FFFFFF") : Color(hex: "#282B28"))
+                    .frame(width: 18, height: 18)
                     .overlay(
-                        Circle()
+                        Rectangle()
                             .stroke(
                                 isStepDone ? Color(hex: "#34D399")
-                                           : isStepActive ? Color(hex: "#1D4ED8") : Color(hex: "#3A3F3A"),
+                                           : isStepActive ? Color(hex: "#FFFFFF") : Color(hex: "#3A3F3A"),
                                 lineWidth: 1
                             )
                     )
 
                 if isStepDone {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.black)
                 } else {
                     Text("\(stepIndex + 1)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(isStepActive ? .white : Color(hex: "#555D58"))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(isStepActive ? .black : Color(hex: "#555D58"))
                 }
             }
 
@@ -145,8 +145,14 @@ struct OnboardingWizardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isStepActive ? Color(hex: "#2563EB").opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(isStepActive ? Color(hex: "#FFFFFF").opacity(0.06) : Color.clear)
+        .overlay(alignment: .leading) {
+            if isStepActive {
+                Rectangle()
+                    .fill(Color(hex: "#FFFFFF"))
+                    .frame(width: 2)
+            }
+        }
         .opacity(isStepFuture ? 0.35 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: currentStep)
     }
@@ -349,6 +355,7 @@ private struct OnboardingAccountCreationStep: View {
                 VStack(alignment: .leading, spacing: LumaTheme.Spacing.xs) {
                     TextField("username", text: $enteredUsername)
                         .textFieldStyle(.plain)
+                        .tint(Color.white)
                         .font(LumaTheme.Typography.body)
                         .foregroundColor(LumaTheme.Colors.primaryText)
                         .padding(LumaTheme.Spacing.md)
@@ -369,6 +376,7 @@ private struct OnboardingAccountCreationStep: View {
                 // Display name field
                 TextField("Your name", text: $enteredDisplayName)
                     .textFieldStyle(.plain)
+                    .tint(Color.white)
                     .font(LumaTheme.Typography.body)
                     .foregroundColor(LumaTheme.Colors.primaryText)
                     .padding(LumaTheme.Spacing.md)
@@ -653,11 +661,13 @@ private struct OnboardingAPIProfileStep: View {
                 if isAPIKeyVisible {
                     TextField("Paste your API key", text: $enteredAPIKey)
                         .textFieldStyle(.plain)
+                        .tint(Color.white)
                         .font(LumaTheme.Typography.body)
                         .foregroundColor(LumaTheme.Colors.primaryText)
                 } else {
                     SecureField("Paste your API key", text: $enteredAPIKey)
                         .textFieldStyle(.plain)
+                        .tint(Color.white)
                         .font(LumaTheme.Typography.body)
                         .foregroundColor(LumaTheme.Colors.primaryText)
                 }
@@ -693,6 +703,7 @@ private struct OnboardingAPIProfileStep: View {
 
             TextField("https://your-provider.com/v1", text: $enteredCustomBaseURL)
                 .textFieldStyle(.plain)
+                .tint(Color.white)
                 .font(LumaTheme.Typography.body)
                 .foregroundColor(LumaTheme.Colors.primaryText)
                 .padding(LumaTheme.Spacing.md)
@@ -721,11 +732,11 @@ private struct OnboardingAPIProfileStep: View {
             case .untested, .testing:
                 EmptyView()
             case .success:
-                Text("✓ Connected")
+                Label("Connected", systemImage: "checkmark")
                     .font(LumaTheme.Typography.caption)
                     .foregroundColor(LumaTheme.Colors.success)
             case .failure(let errorDescription):
-                Text("✗ Failed: \(errorDescription)")
+                Label("Failed: \(errorDescription)", systemImage: "xmark")
                     .font(LumaTheme.Typography.caption)
                     .foregroundColor(LumaTheme.Colors.error)
                     .multilineTextAlignment(.center)

@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Luma — Full Retro UI Demo</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #111111;
+  --s1:       #181818;
+  --s2:       #1e1e1e;
+  --s3:       #242424;
+  --s4:       #2a2a2a;
+  --b:        #2a2a2a;
+  --b2:       #363636;
+  --t1:       #ebebeb;
+  --t2:       #888;
+  --t3:       #4a4a4a;
+  --acc:      #ffffff;
+  --acc-fg:   #111111;
+  --ok:       #3ecf8e;
+  --warn:     #f0a500;
+  --err:      #e5484d;
+  --mono:     "SF Mono","Fira Code",monospace;
+  --sans:     -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+}
+body { background:var(--bg); color:var(--t1); font-family:var(--sans); padding:40px 32px 100px; }
+/* ── layout ── */
+.page-header { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); padding-bottom:16px; border-bottom:1px solid var(--b); margin-bottom:48px; }
+.sec { margin-bottom:64px; }
+.sec-label { font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.sec-label::after { content:''; flex:1; height:1px; background:var(--b); }
+.row { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
+.col-label { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--t3); margin-bottom:8px; }
+/* ── primitives ── */
+.btn { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; border:none; cursor:pointer; padding:6px 14px; }
+.btn-pri  { background:var(--acc); color:var(--acc-fg); }
+.btn-pri:hover  { background:#d5d5d5; }
+.btn-ghost { background:transparent; color:var(--t2); border:1px solid var(--b2); }
+.btn-ghost:hover { color:var(--t1); border-color:var(--t3); }
+.btn-danger { background:transparent; color:var(--err); border:1px solid rgba(229,72,77,.25); }
+.btn-link { background:transparent; border:none; color:var(--acc); font-size:13px; cursor:pointer; text-decoration:underline; padding:0; font-family:var(--sans); }
+.mono { font-family:var(--mono); }
+.mono-sm { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--t3); }
+.pill-tag { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; padding:2px 8px; border:1px solid var(--b2); color:var(--t3); }
+.pill-tag.active { background:var(--acc); color:var(--acc-fg); border-color:var(--acc); }
+.pill-tag.ok { color:var(--ok); border-color:rgba(62,207,142,.3); }
+.pill-tag.warn { color:var(--warn); border-color:rgba(240,165,0,.3); }
+.pill-tag.err { color:var(--err); border-color:rgba(229,72,77,.3); }
+.divider { height:1px; background:var(--b); }
+.input { background:var(--s2); border:1px solid var(--b); color:var(--t1); font-family:var(--sans); font-size:13px; padding:8px 10px; width:100%; outline:none; }
+.input::placeholder { color:var(--t3); }
+.input:focus { border-color:var(--b2); }
+.input-mono { font-family:var(--mono); font-size:11px; color:var(--t2); letter-spacing:.04em; }
+/* toggles */
+.tog { width:38px; height:22px; background:var(--s3); border:1px solid var(--b2); position:relative; cursor:pointer; flex-shrink:0; }
+.tog.on { background:var(--acc); border-color:var(--acc); }
+.tog::after { content:''; position:absolute; width:16px; height:16px; background:var(--t3); top:2px; left:2px; transition:left .12s; }
+.tog.on::after { left:18px; background:var(--acc-fg); }
+/* scrollbar */
+::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--b2); }
+
+/* ════════════════════════════════════════════
+   COMPANION PANEL
+════════════════════════════════════════════ */
+.panel { width:340px; background:var(--s1); border:1px solid var(--b); display:flex; flex-direction:column; }
+.panel-hdr { display:flex; align-items:center; padding:12px 14px; gap:10px; }
+.panel-dot { width:8px; height:8px; background:var(--ok); flex-shrink:0; }
+.panel-dot.idle { background:var(--t3); }
+.panel-dot.proc { background:var(--warn); }
+.panel-title { font-size:14px; font-weight:600; color:var(--t1); flex:1; }
+.panel-top-btn { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; border:1px solid var(--b2); background:var(--s3); color:var(--t2); padding:4px 10px; cursor:pointer; }
+.panel-top-btn:hover { color:var(--t1); border-color:var(--b2); }
+.panel-top-x { width:24px; height:24px; background:var(--s2); border:1px solid var(--b); display:flex; align-items:center; justify-content:center; color:var(--t3); font-size:12px; cursor:pointer; }
+.panel-row { padding:10px 14px; border-top:1px solid var(--b); }
+.hint-text { font-size:13px; color:var(--t2); }
+.model-box { display:flex; align-items:center; gap:0; border:1px solid var(--b); background:var(--s2); }
+.model-icon { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-right:1px solid var(--b); flex-shrink:0; }
+.model-icon svg { width:14px; height:14px; fill:var(--t3); }
+.model-name-text { flex:1; font-size:13px; color:var(--t1); padding:0 10px; }
+.model-badge-box { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--acc); border-left:1px solid var(--b); padding:0 10px; height:32px; display:flex; align-items:center; }
+/* agent section in panel */
+.agent-sec { border-top:1px solid var(--b); }
+.agent-sec-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; }
+.agent-sec-title { font-size:13px; font-weight:500; color:var(--t1); }
+.agent-sec-state { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); }
+.agent-sub { font-size:12px; color:var(--t3); padding:0 14px 10px; }
+.agent-input-box { margin:0 14px 12px; background:var(--s2); border:1px solid var(--b); display:flex; align-items:center; gap:0; }
+.agent-input-text { flex:1; font-size:12px; color:var(--t3); padding:9px 10px; font-family:var(--sans); background:transparent; border:none; outline:none; }
+.agent-actions { display:flex; padding:0 14px 14px; justify-content:flex-end; gap:8px; }
+.icon-sq { width:32px; height:32px; background:var(--s2); border:1px solid var(--b); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.icon-sq.mic { background:#3c1f1f; border-color:#5a2828; color:#e55; }
+.icon-sq.send { background:#1a2537; border-color:#1e3a5f; color:#4a90d9; }
+/* panel bottom bar */
+.panel-bottom { border-top:1px solid var(--b); padding:10px 14px; display:flex; align-items:center; gap:10px; }
+.avatar-sm { width:28px; height:28px; background:var(--s3); border:1px solid var(--b2); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:10px; color:var(--t2); flex-shrink:0; }
+.username-text { flex:1; font-size:12px; color:var(--t2); }
+.bottom-icon { width:28px; height:28px; background:transparent; border:none; color:var(--t3); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.bottom-icon:hover { color:var(--t1); }
+.beta-row { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; border-top:1px solid var(--b); }
+.beta-label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--t2); }
+.beta-icon { font-size:14px; }
+
+/* update card */
+.update-card { border:1px solid var(--b2); background:var(--s2); padding:12px; margin:12px 14px 0; }
+.update-top { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.update-sub { font-size:11px; color:var(--t2); margin-bottom:10px; line-height:1.5; }
+.update-btns { display:flex; gap:8px; }
+
+/* ════════════════════════════════════════════
+   SETTINGS
+════════════════════════════════════════════ */
+.settings { width:800px; height:540px; background:var(--bg); border:1px solid var(--b); display:flex; overflow:hidden; }
+.settings-sidebar { width:214px; background:var(--s1); border-right:1px solid var(--b); display:flex; flex-direction:column; flex-shrink:0; }
+.settings-sidebar-hdr { padding:18px 16px 14px; border-bottom:1px solid var(--b); }
+.settings-sidebar-title { font-size:15px; font-weight:700; color:var(--t1); }
+.settings-nav { padding:8px 8px; flex:1; overflow-y:auto; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; cursor:pointer; color:var(--t2); font-size:13px; border-left:2px solid transparent; }
+.nav-item:hover { color:var(--t1); background:var(--s2); }
+.nav-item.active { color:var(--t1); background:var(--s2); border-left:2px solid var(--acc); }
+.nav-icon { font-size:14px; width:18px; text-align:center; flex-shrink:0; }
+.settings-content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.settings-topbar { display:flex; align-items:center; justify-content:flex-end; padding:10px 16px; border-bottom:1px solid var(--b); flex-shrink:0; }
+.settings-body { flex:1; overflow-y:auto; padding:24px 28px; }
+.page-title { font-size:24px; font-weight:600; color:var(--t1); margin-bottom:4px; }
+.page-sub { font-size:13px; color:var(--t2); margin-bottom:22px; }
+/* settings sections */
+.s-sec { margin-bottom:28px; }
+.s-sec-label { font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); padding-bottom:10px; border-bottom:1px solid var(--b); margin-bottom:14px; }
+.s-row { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--b); }
+.s-row:last-child { border-bottom:none; }
+.s-row-left {}
+.s-row-label { font-size:13px; color:var(--t1); }
+.s-row-sub { font-size:11px; color:var(--t2); margin-top:2px; line-height:1.4; }
+/* account */
+.avatar-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:20px; }
+.avatar-lg { width:64px; height:64px; background:var(--s3); border:1px solid var(--b2); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:20px; color:var(--t2); }
+/* api profiles */
+.profile-card { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--b); background:var(--s2); margin-bottom:8px; }
+.profile-left { display:flex; align-items:center; gap:10px; }
+.profile-check { width:20px; height:20px; background:transparent; border:1px solid var(--acc); display:flex; align-items:center; justify-content:center; color:var(--acc); font-size:12px; }
+.profile-name { font-size:13px; color:var(--t1); font-weight:500; }
+.profile-provider { font-size:11px; color:var(--t2); }
+.profile-actions { display:flex; gap:8px; }
+.add-btn { display:flex; align-items:center; gap:8px; padding:11px 14px; border:1px solid var(--b); background:var(--s2); cursor:pointer; color:var(--t2); font-size:13px; width:100%; }
+.add-btn:hover { color:var(--t1); border-color:var(--b2); }
+.add-plus { font-size:16px; color:var(--acc); }
+/* model picker */
+.model-search { position:relative; margin-bottom:14px; }
+.model-search input { padding-left:32px; }
+.search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--t3); font-size:13px; }
+.model-list { border:1px solid var(--b); background:var(--s2); overflow-y:auto; max-height:320px; }
+.model-group-label { font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); padding:8px 12px 6px; background:var(--s1); border-bottom:1px solid var(--b); position:sticky; top:0; }
+.model-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--b); cursor:pointer; }
+.model-item:last-child { border-bottom:none; }
+.model-item:hover { background:var(--s3); }
+.model-item.selected { background:var(--s3); }
+.model-item-name { font-size:13px; color:var(--t1); }
+.model-item-id { font-family:var(--mono); font-size:10px; color:var(--t3); margin-top:1px; }
+.model-item-check { color:var(--acc); font-size:14px; }
+.custom-model-row { margin-top:14px; }
+.custom-model-row .s-row-label { font-size:13px; font-weight:600; margin-bottom:8px; }
+.custom-input-row { display:flex; gap:8px; }
+/* voice */
+.voice-grid { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.voice-chip { font-size:12px; color:var(--t2); border:1px solid var(--b); padding:5px 10px; cursor:pointer; background:var(--s2); }
+.voice-chip:hover { border-color:var(--b2); color:var(--t1); }
+.voice-chip.active { background:var(--acc); color:var(--acc-fg); border-color:var(--acc); }
+.voice-hint { font-size:11px; color:var(--t3); margin-bottom:20px; line-height:1.5; }
+.slider-row { margin-bottom:16px; }
+.slider-hdr { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
+.slider-name { font-size:13px; font-weight:600; color:var(--t1); }
+.slider-meta { display:flex; align-items:center; gap:8px; }
+.slider-meta-label { font-size:12px; color:var(--t3); }
+.slider-meta-val { font-size:14px; font-weight:600; color:var(--t1); }
+.slider-track { height:3px; background:var(--s3); position:relative; cursor:pointer; }
+.slider-fill { height:100%; background:var(--acc); }
+.slider-thumb { width:14px; height:14px; background:var(--acc); border:1px solid var(--bg); position:absolute; top:-5px; transform:translateX(-50%); }
+/* behaviour toggles */
+.behav-row { display:flex; align-items:flex-start; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--b); gap:16px; }
+.behav-row:last-child { border-bottom:none; }
+/* play preview */
+.voice-preview { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--b); background:var(--s2); margin-top:14px; }
+.preview-info { font-size:12px; color:var(--t2); }
+.preview-sub { font-size:11px; color:var(--t3); }
+/* agents */
+.segment-row { display:flex; gap:0; margin-bottom:14px; }
+.seg-btn { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:7px 14px; border:1px solid var(--b); background:var(--s2); color:var(--t2); cursor:pointer; margin-right:-1px; }
+.seg-btn.active { background:var(--acc); color:var(--acc-fg); border-color:var(--acc); z-index:1; }
+.cli-info { font-family:var(--mono); font-size:10px; color:var(--t3); line-height:1.7; margin-top:8px; padding:10px; border:1px solid var(--b); background:var(--s2); }
+.stepper-row { display:flex; align-items:center; gap:10px; }
+.stepper-val { font-size:20px; font-weight:600; color:var(--t1); min-width:24px; }
+.stepper-btns { display:flex; flex-direction:column; }
+.stepper-btn { width:20px; height:16px; background:var(--s2); border:1px solid var(--b); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--t2); font-size:10px; }
+.stepper-btn:hover { color:var(--t1); }
+.no-agents { font-size:13px; color:var(--t3); padding:16px 0; font-style:italic; }
+/* customisation */
+.accent-swatches { display:flex; gap:10px; margin-bottom:10px; }
+.swatch { width:36px; height:36px; cursor:pointer; position:relative; border:2px solid transparent; }
+.swatch.selected { outline:2px solid var(--t1); outline-offset:2px; }
+.swatch-label { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); text-align:center; margin-top:4px; }
+.input-style-option { display:flex; align-items:center; padding:12px 14px; border:1px solid var(--b); background:var(--s2); margin-bottom:6px; gap:12px; cursor:pointer; }
+.input-style-option.selected { border-color:var(--acc); }
+.radio-dot { width:16px; height:16px; border:1px solid var(--b2); flex-shrink:0; position:relative; }
+.radio-dot.on { border-color:var(--acc); }
+.radio-dot.on::after { content:''; position:absolute; inset:3px; background:var(--acc); }
+.input-style-info { flex:1; }
+.input-style-name { font-size:13px; color:var(--t1); font-weight:500; }
+.input-style-desc { font-size:11px; color:var(--t3); margin-top:2px; }
+.input-style-preview { width:80px; height:28px; background:var(--s3); border:1px solid var(--b); display:flex; align-items:center; padding:0 6px; gap:4px; flex-shrink:0; }
+.preview-dot { width:6px; height:6px; background:var(--ok); }
+.preview-line { flex:1; height:1px; background:var(--b2); }
+/* bubble grid */
+.bubble-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+.bubble-option { border:1px solid var(--b); background:var(--s2); cursor:pointer; aspect-ratio:4/3; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding:8px; position:relative; overflow:hidden; }
+.bubble-option.selected { border-color:var(--acc); }
+.bubble-orb { width:36px; height:36px; background:radial-gradient(circle at 35% 35%, #4a4a6a, #1a1a2e); position:absolute; top:50%; left:50%; transform:translate(-50%,-60%); }
+.bubble-num { font-family:var(--mono); font-size:8px; letter-spacing:.1em; color:var(--t3); }
+.bubble-name { font-size:11px; color:var(--t2); margin-top:2px; }
+.bubble-option.selected .bubble-name { color:var(--acc); }
+/* general */
+/* danger */
+.danger-label { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--err); margin-bottom:10px; }
+
+/* ════════════════════════════════════════════
+   ONBOARDING
+════════════════════════════════════════════ */
+.onboard { width:700px; height:460px; background:var(--bg); border:1px solid var(--b); display:flex; overflow:hidden; }
+.ob-sidebar { width:200px; background:var(--s1); border-right:1px solid var(--b); flex-shrink:0; padding-top:20px; }
+.ob-logo { font-family:var(--mono); font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--t1); padding:0 20px 18px; border-bottom:1px solid var(--b); margin-bottom:10px; }
+.ob-step { display:flex; align-items:center; gap:12px; padding:9px 16px; cursor:pointer; }
+.ob-step.active { background:var(--s2); border-left:2px solid var(--acc); padding-left:14px; }
+.ob-num { width:22px; height:22px; border:1px solid var(--b2); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:9px; color:var(--t3); flex-shrink:0; }
+.ob-num.active { border-color:var(--acc); color:var(--acc); }
+.ob-num.done { background:var(--ok); border-color:var(--ok); color:#000; font-size:11px; }
+.ob-step-name { font-size:12px; color:var(--t2); }
+.ob-step.active .ob-step-name { color:var(--t1); }
+.ob-content { flex:1; display:flex; flex-direction:column; padding:32px 36px; }
+.ob-eyebrow { font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); margin-bottom:12px; }
+.ob-title { font-size:22px; font-weight:600; color:var(--t1); margin-bottom:10px; line-height:1.2; }
+.ob-body { font-size:13px; color:var(--t2); line-height:1.65; flex:1; }
+.ob-bottom { display:flex; align-items:center; justify-content:space-between; padding-top:16px; border-top:1px solid var(--b); margin-top:16px; }
+.ob-counter { font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--t3); }
+/* permission rows */
+.perm-row { display:flex; align-items:center; justify-content:space-between; padding:11px 12px; border:1px solid var(--b); background:var(--s2); margin-bottom:7px; }
+.perm-left { display:flex; align-items:center; gap:10px; }
+.perm-icon { width:30px; height:30px; background:var(--s3); border:1px solid var(--b); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.perm-name { font-size:13px; color:var(--t1); }
+.perm-sub { font-size:11px; color:var(--t3); }
+.perm-status { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; padding:2px 8px; border:1px solid; }
+.perm-ok { color:var(--ok); border-color:rgba(62,207,142,.3); }
+.perm-pending { color:var(--t3); border-color:var(--b); }
+
+/* ════════════════════════════════════════════
+   FLOATING INPUT
+════════════════════════════════════════════ */
+.fi-pill { width:460px; background:var(--s1); border:1px solid var(--b2); }
+.fi-row { display:flex; align-items:center; padding:11px 13px; gap:10px; }
+.fi-prompt { font-family:var(--mono); font-size:12px; color:var(--t3); }
+.fi-input { flex:1; font-size:13px; color:var(--t1); background:transparent; border:none; outline:none; font-family:var(--sans); }
+.fi-send { background:var(--acc); color:var(--acc-fg); border:none; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; padding:5px 12px; cursor:pointer; flex-shrink:0; }
+.fi-response { border-top:1px solid var(--b); padding:13px 14px; font-size:12px; color:var(--t2); line-height:1.6; }
+.fi-res-hdr { font-family:var(--mono); font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); margin-bottom:7px; }
+
+/* ════════════════════════════════════════════
+   OVERLAY CURSOR BUBBLE
+════════════════════════════════════════════ */
+.overlay-scene { width:520px; height:180px; background:var(--s1); border:1px solid var(--b); position:relative; }
+.overlay-bg-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--b2); pointer-events:none; }
+.cursor-bubble-wrap { position:absolute; bottom:14px; left:14px; display:flex; align-items:flex-end; gap:10px; }
+.cursor-sq { width:12px; height:12px; background:var(--acc); flex-shrink:0; margin-bottom:2px; }
+.cursor-card { background:var(--s2); border:1px solid var(--b2); padding:11px 13px; max-width:360px; }
+.cursor-hdr { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+.cursor-status-dot { width:5px; height:5px; background:var(--ok); }
+.cursor-label { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--t3); }
+.cursor-text { font-size:12px; color:var(--t1); line-height:1.55; }
+.waveform { display:flex; align-items:center; gap:2px; height:14px; margin-left:auto; }
+.wbar { width:2px; background:var(--acc); opacity:.55; }
+
+/* ════════════════════════════════════════════
+   AGENT DOCK BUBBLE
+════════════════════════════════════════════ */
+.agent-bubble { width:240px; background:#141614; border:1px solid #2E322E; display:flex; flex-direction:column; }
+.ab-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; border-bottom:1px solid #2E322E; border-left:3px solid var(--acc); }
+.ab-title { font-size:13px; color:var(--t1); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px; }
+.ab-actions { display:flex; align-items:center; gap:6px; }
+.ab-x { width:18px; height:18px; background:transparent; border:1px solid #2E322E; display:flex; align-items:center; justify-content:center; color:var(--t3); font-size:10px; cursor:pointer; }
+.ab-body { padding:10px 12px; font-size:12px; color:var(--t3); font-style:italic; min-height:40px; }
+.ab-body.has-text { color:var(--t2); font-style:normal; }
+.ab-redirect { border-top:1px solid #2E322E; }
+.ab-redirect-label { font-family:var(--mono); font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--t3); padding:7px 12px 4px; }
+.ab-redirect-row { display:flex; align-items:center; padding:0 8px 8px; gap:6px; }
+.ab-redirect-input { flex:1; background:transparent; border:1px solid #2E322E; color:var(--t2); font-size:12px; font-family:var(--sans); padding:7px 8px; outline:none; }
+.ab-icon { width:28px; height:28px; background:#1c1e1c; border:1px solid #2E322E; display:flex; align-items:center; justify-content:center; color:var(--t3); font-size:12px; cursor:pointer; }
+
+/* ════════════════════════════════════════════
+   COMPONENT TOKENS
+════════════════════════════════════════════ */
+.token-card { border:1px solid var(--b); background:var(--s1); padding:14px; min-width:180px; }
+.token-card-label { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--t3); margin-bottom:12px; }
+.btn-showcase { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.status-list { display:flex; flex-direction:column; gap:8px; }
+.status-item { display:flex; align-items:center; gap:8px; }
+.status-sq { width:7px; height:7px; }
+.tog-showcase { display:flex; flex-direction:column; gap:10px; }
+.tog-item { display:flex; align-items:center; gap:10px; }
+.badge-showcase { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.type-showcase { display:flex; flex-direction:column; gap:6px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">LUMA · FULL UI DEMO · RETRO AESTHETIC · WHITE ACCENT · ALL FEATURES PRESERVED</div>
+
+<!-- ══════════════════ 01 COMPANION PANEL ══════════════════ -->
+<div class="sec">
+<div class="sec-label">01 — Companion Panel</div>
+<div class="row">
+
+  <!-- Idle -->
+  <div>
+    <div class="col-label">Idle / Ready</div>
+    <div class="panel">
+      <div class="panel-hdr">
+        <div class="panel-dot"></div>
+        <span class="panel-title">Luma</span>
+        <button class="panel-top-btn">Agent mode</button>
+        <div class="panel-top-x">×</div>
+      </div>
+      <div class="panel-row">
+        <div class="hint-text">Hold Control+Option to talk.</div>
+      </div>
+      <div class="panel-row">
+        <div class="model-box">
+          <div class="model-icon">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+          </div>
+          <div class="model-name-text">claude-sonnet-4-6</div>
+          <div class="model-badge-box">Anthropic</div>
+        </div>
+      </div>
+      <div class="agent-sec">
+        <div class="agent-sec-hdr">
+          <span class="agent-sec-title">Ask Agent</span>
+          <span class="agent-sec-state">IDLE</span>
+        </div>
+        <div class="agent-sub">Ask for coding, research, writing, or app tasks.</div>
+        <div class="agent-input-box">
+          <input class="agent-input-text" placeholder="Ask Luma to do something…">
+        </div>
+        <div class="agent-actions">
+          <div class="icon-sq mic">🎤</div>
+          <div class="icon-sq send">➤</div>
+        </div>
+      </div>
+      <div class="beta-row">
+        <div class="beta-label"><span class="beta-icon">⚗</span> Beta updates</div>
+        <div class="tog on"></div>
+      </div>
+      <div class="panel-bottom">
+        <div class="avatar-sm">NO</div>
+        <span class="username-text">nox</span>
+        <button class="bottom-icon">⚙</button>
+        <button class="bottom-icon">⏻</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update card state -->
+  <div>
+    <div class="col-label">With Update Card</div>
+    <div class="panel">
+      <div class="panel-hdr">
+        <div class="panel-dot"></div>
+        <span class="panel-title">Luma</span>
+        <button class="panel-top-btn">Agent mode</button>
+        <div class="panel-top-x">×</div>
+      </div>
+      <div class="divider"></div>
+      <div class="update-card">
+        <div class="update-top">
+          <span class="pill-tag active">v0.5.3</span>
+          <span style="font-size:12px;color:var(--t1);font-weight:500;">Update available</span>
+        </div>
+        <div class="update-sub">In-App Update Detection + Retro UI overhaul</div>
+        <div class="update-btns">
+          <button class="btn btn-pri">Download</button>
+          <button class="btn btn-ghost">Dismiss</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <div class="model-box">
+          <div class="model-icon">
+            <svg viewBox="0 0 24 24" fill="var(--t3)"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </div>
+          <div class="model-name-text">claude-sonnet-4-6</div>
+          <div class="model-badge-box">Anthropic</div>
+        </div>
+      </div>
+      <div class="beta-row">
+        <div class="beta-label"><span class="beta-icon">⚗</span> Beta updates</div>
+        <div class="tog on"></div>
+      </div>
+      <div class="panel-bottom">
+        <div class="avatar-sm">NO</div>
+        <span class="username-text">nox</span>
+        <button class="bottom-icon">⚙</button>
+        <button class="bottom-icon">⏻</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Working -->
+  <div>
+    <div class="col-label">Agent Working</div>
+    <div class="panel">
+      <div class="panel-hdr">
+        <div class="panel-dot" style="background:var(--warn);"></div>
+        <span class="panel-title">Luma</span>
+        <button class="panel-top-btn" style="border-color:var(--acc);color:var(--acc);">Agent mode</button>
+        <div class="panel-top-x">×</div>
+      </div>
+      <div class="panel-row">
+        <div class="model-box">
+          <div class="model-icon"><svg viewBox="0 0 24 24" fill="var(--t3)"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+          <div class="model-name-text">gemini-2.5-flash</div>
+          <div class="model-badge-box" style="color:var(--ok);">Free</div>
+        </div>
+      </div>
+      <div class="agent-sec">
+        <div class="agent-sec-hdr">
+          <span class="agent-sec-title">Research Agent</span>
+          <span class="agent-sec-state" style="color:var(--warn);">WORKING</span>
+        </div>
+        <div class="agent-sub">Searching GitHub for concurrency patterns…</div>
+        <div class="agent-input-box">
+          <input class="agent-input-text" placeholder="Assign new task (stops current)…">
+        </div>
+        <div class="agent-actions">
+          <div class="icon-sq mic">🎤</div>
+          <div class="icon-sq" style="background:var(--s3);border-color:var(--b2);color:var(--t3);">×</div>
+        </div>
+      </div>
+      <div class="panel-bottom">
+        <div class="avatar-sm">NO</div>
+        <span class="username-text">nox</span>
+        <button class="bottom-icon">⚙</button>
+        <button class="bottom-icon">⏻</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+</div><!-- /sec -->
+
+<!-- ══════════════════ 02 SETTINGS ══════════════════ -->
+<div class="sec">
+<div class="sec-label">02 — Settings · Account</div>
+<div class="row">
+  <div>
+    <div class="settings">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item active"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">Account</div>
+          <div class="page-sub">Manage your local identity and reset behavior.</div>
+          <div class="avatar-wrap">
+            <div class="avatar-lg">NO</div>
+            <div style="font-size:14px;font-weight:600;color:var(--t1);">nox</div>
+            <div style="font-size:12px;color:var(--t3);">·</div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Display Name</div>
+            <input class="input" value="·" style="margin-bottom:4px;">
+            <div style="font-size:11px;color:var(--t3);">Changes save automatically.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · API</div>
+<div class="row">
+  <div>
+    <div class="settings">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item active"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">API</div>
+          <div class="page-sub">Configure API providers and connection profiles.</div>
+          <div class="profile-card">
+            <div class="profile-left">
+              <div class="profile-check">✓</div>
+              <div>
+                <div class="profile-name">Anthropic Profile</div>
+                <div class="profile-provider">Anthropic</div>
+              </div>
+            </div>
+            <div class="profile-actions">
+              <button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;">Edit</button>
+              <button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;color:var(--t3);">Set Default</button>
+              <button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;color:var(--err);border-color:rgba(229,72,77,.2);">Delete</button>
+            </div>
+          </div>
+          <button class="add-btn">
+            <span class="add-plus">+</span>
+            <span>Add Profile</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · Model</div>
+<div class="row">
+  <div>
+    <div class="settings" style="height:560px;">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item active"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">Model</div>
+          <div class="page-sub">Choose the active model for companion responses.</div>
+          <div style="font-size:13px;color:var(--t2);margin-bottom:4px;">Model is selected per profile. Manage profiles in the API Profiles tab.</div>
+          <div style="font-size:13px;color:var(--t2);margin-bottom:14px;"><strong style="color:var(--t1);">Active Profile:</strong> Anthropic Profile</div>
+          <div class="model-search">
+            <span class="search-icon">🔍</span>
+            <input class="input" placeholder="Search models…" style="padding-left:32px;">
+          </div>
+          <div class="model-list">
+            <div class="model-group-label">Anthropic</div>
+            <div class="model-item"><div><div class="model-item-name">Claude Opus 4.6</div><div class="model-item-id">claude-opus-4-6</div></div></div>
+            <div class="model-item selected"><div><div class="model-item-name">Claude Sonnet 4.6</div><div class="model-item-id">claude-sonnet-4-6</div></div><div class="model-item-check">✓</div></div>
+            <div class="model-item"><div><div class="model-item-name">Claude Haiku 4.5</div><div class="model-item-id">claude-haiku-4-5-20251001</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">Claude Opus 4</div><div class="model-item-id">claude-opus-4</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">Claude Sonnet 4</div><div class="model-item-id">claude-sonnet-4</div></div></div>
+            <div class="model-group-label">OpenRouter</div>
+            <div class="model-item"><div><div class="model-item-name">Gemini 2.5 Flash (free)</div><div class="model-item-id">google/gemini-2.5-flash:free</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">Gemini 2.5 Pro (free)</div><div class="model-item-id">google/gemini-2.5-pro:free</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">DeepSeek R1 (free)</div><div class="model-item-id">deepseek/deepseek-r1:free</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">GPT-4o</div><div class="model-item-id">openai/gpt-4o</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">Claude Sonnet 4.6 (via OR)</div><div class="model-item-id">anthropic/claude-sonnet-4-6</div></div></div>
+            <div class="model-group-label">Google AI</div>
+            <div class="model-item"><div><div class="model-item-name">Gemini 2.5 Flash</div><div class="model-item-id">gemini-2.5-flash</div></div></div>
+            <div class="model-item"><div><div class="model-item-name">Gemini 2.5 Pro</div><div class="model-item-id">gemini-2.5-pro</div></div></div>
+          </div>
+          <div class="custom-model-row">
+            <div class="s-sec-label" style="margin-bottom:8px;">Custom Model ID</div>
+            <div class="custom-input-row">
+              <input class="input" value="claude-sonnet-4-6" style="font-family:var(--mono);font-size:11px;">
+              <button class="btn btn-ghost">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--t3);margin-top:6px;">Paste any OpenRouter or provider model ID. Tap a row above to select a preset.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · Voice</div>
+<div class="row">
+  <div>
+    <div class="settings" style="height:620px;">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item active"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">Voice</div>
+          <div class="page-sub">Adjust speech voice, pitch, rate, and volume.</div>
+          <div class="s-sec">
+            <div class="s-sec-label">Voice</div>
+            <div class="voice-grid">
+              <div class="voice-chip">Albert</div>
+              <div class="voice-chip">Bad News</div>
+              <div class="voice-chip">Bahh</div>
+              <div class="voice-chip">Bells</div>
+              <div class="voice-chip">Boing</div>
+              <div class="voice-chip">Bubbles</div>
+              <div class="voice-chip">Cellos</div>
+              <div class="voice-chip">Daniel</div>
+              <div class="voice-chip">Eddy</div>
+              <div class="voice-chip">Flo</div>
+              <div class="voice-chip">Fred</div>
+              <div class="voice-chip">Good News</div>
+              <div class="voice-chip">Grandma</div>
+              <div class="voice-chip">Grandpa</div>
+              <div class="voice-chip">Jester</div>
+              <div class="voice-chip">Junior</div>
+              <div class="voice-chip">Karen</div>
+              <div class="voice-chip active">Karen (Premium)</div>
+              <div class="voice-chip">Kathy</div>
+              <div class="voice-chip">Moira</div>
+              <div class="voice-chip">Organ</div>
+              <div class="voice-chip">Ralph</div>
+              <div class="voice-chip">Reed</div>
+              <div class="voice-chip">Rishi</div>
+              <div class="voice-chip">Rocko</div>
+              <div class="voice-chip">Samantha</div>
+              <div class="voice-chip">Sandy</div>
+              <div class="voice-chip">Shelley</div>
+              <div class="voice-chip">Superstar</div>
+              <div class="voice-chip">Tessa</div>
+              <div class="voice-chip">Trinoids</div>
+              <div class="voice-chip">Veena</div>
+              <div class="voice-chip">Whisper</div>
+              <div class="voice-chip">Wobble</div>
+              <div class="voice-chip">Zarvox</div>
+            </div>
+            <div class="voice-hint">Shows all English voices installed on this Mac. Install more in System Settings → Accessibility → Spoken Content.</div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-hdr">
+              <div class="slider-name">Pitch</div>
+              <div class="slider-meta"><span class="slider-meta-label">Low</span><span class="slider-meta-val">1.40</span><span class="slider-meta-label">High</span></div>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill" style="width:70%"></div>
+              <div class="slider-thumb" style="left:70%"></div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-hdr">
+              <div class="slider-name">Speaking Rate</div>
+              <div class="slider-meta"><span class="slider-meta-label">Slow</span><span class="slider-meta-val">52%</span><span class="slider-meta-label">Fast</span></div>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill" style="width:52%"></div>
+              <div class="slider-thumb" style="left:52%"></div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-hdr">
+              <div class="slider-name">Volume</div>
+              <div class="slider-meta"><span class="slider-meta-label">Quiet</span><span class="slider-meta-val">100%</span><span class="slider-meta-label">Loud</span></div>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill" style="width:100%"></div>
+              <div class="slider-thumb" style="left:100%"></div>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Behaviour</div>
+            <div class="behav-row">
+              <div>
+                <div class="s-row-label">Strip coordinate strings</div>
+                <div class="s-row-sub">Removes coordinate patterns like 'point 400, 200' from spoken text</div>
+              </div>
+              <div class="tog on"></div>
+            </div>
+            <div class="behav-row">
+              <div>
+                <div class="s-row-label">Auto-read responses</div>
+                <div class="s-row-sub">Speaks every AI response aloud automatically</div>
+              </div>
+              <div class="tog on"></div>
+            </div>
+          </div>
+          <div class="voice-preview">
+            <div>
+              <div class="preview-info">Karen (Premium) · Rate 52% · Pitch 1.40</div>
+              <div class="preview-sub">Click play to hear a sample</div>
+            </div>
+            <button class="btn btn-ghost">▶ Play</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · Agents</div>
+<div class="row">
+  <div>
+    <div class="settings" style="height:540px;">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item active"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">Agents</div>
+          <div class="page-sub">Set agent limits, defaults, and agent-mode options.</div>
+          <div style="font-size:13px;color:var(--t2);margin-bottom:14px;">Configure agent mode behavior, runtime, and per-agent model assignments.</div>
+          <div class="s-sec">
+            <div class="s-row" style="border-bottom:1px solid var(--b);padding-bottom:14px;margin-bottom:14px;">
+              <div>
+                <div class="s-row-label" style="font-weight:600;">Agent Mode</div>
+                <div class="s-row-sub">Enable the agent panel section and HUD dashboard for autonomous task execution.</div>
+              </div>
+              <div class="tog on"></div>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Agent Runtime</div>
+            <div class="segment-row">
+              <div class="seg-btn active">Auto-detect</div>
+              <div class="seg-btn">Claude Code CLI</div>
+              <div class="seg-btn">Claude API</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--b);border-left:none;background:var(--s2);">
+                <div style="width:6px;height:6px;background:var(--ok);"></div>
+                <span style="font-size:12px;color:var(--ok);font-family:var(--mono);font-size:10px;letter-spacing:.08em;">CLI detected</span>
+              </div>
+            </div>
+            <div class="cli-info">
+              Current: Claude Code<br>
+              CLI path: /opt/homebrew/bin/claude
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Maximum Agents</div>
+            <div class="stepper-row">
+              <div class="stepper-val">3</div>
+              <div class="stepper-btns">
+                <div class="stepper-btn">▲</div>
+                <div class="stepper-btn">▼</div>
+              </div>
+              <span style="font-size:13px;color:var(--t2);">simultaneous agents allowed</span>
+            </div>
+            <div style="font-size:11px;color:var(--t3);margin-top:6px;">When the limit is reached, the oldest idle agent is automatically dismissed.</div>
+          </div>
+          <div class="s-sec">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="s-sec-label" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Agent Profiles</div>
+              <button class="btn btn-ghost" style="font-size:9px;">+ Add Agent</button>
+            </div>
+            <div class="no-agents">No agent profiles configured. Add one to assign a model.</div>
+            <div style="font-size:11px;color:var(--t3);">Default model: Claude Sonnet 4.6. Each agent can use a different model for its API calls.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · Customization</div>
+<div class="row">
+  <div>
+    <div class="settings" style="height:640px;">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item active"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">Customization</div>
+          <div class="page-sub">Choose accent color and agent bubble appearance.</div>
+          <div class="s-sec">
+            <div class="s-sec-label">Accent Theme</div>
+            <div style="display:flex;gap:20px;align-items:flex-end;">
+              <div>
+                <div class="swatch selected" style="background:#ffffff;"></div>
+                <div class="swatch-label">White</div>
+              </div>
+              <div>
+                <div class="swatch" style="background:#2563eb;"></div>
+                <div class="swatch-label">Blue</div>
+              </div>
+              <div>
+                <div class="swatch" style="background:#059669;"></div>
+                <div class="swatch-label">Mint</div>
+              </div>
+              <div>
+                <div class="swatch" style="background:#d97706;"></div>
+                <div class="swatch-label">Amber</div>
+              </div>
+              <div>
+                <div class="swatch" style="background:#e11d48;"></div>
+                <div class="swatch-label">Rose</div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--t3);margin-top:10px;">Updates the cursor color, agent bubble glow, and accent highlights throughout the app.</div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Quick Input Style</div>
+            <div style="font-size:12px;color:var(--t3);margin-bottom:10px;">The pill that appears when you double-tap ⌘ or ^. Changes apply immediately.</div>
+            <div class="input-style-option selected">
+              <div class="radio-dot on"></div>
+              <div class="input-style-info">
+                <div class="input-style-name">Clean Pill</div>
+                <div class="input-style-desc">Fully rounded, orb dot — 440 × 52 pt</div>
+              </div>
+              <div class="input-style-preview"><div class="preview-dot"></div><div class="preview-line"></div></div>
+            </div>
+            <div class="input-style-option">
+              <div class="radio-dot"></div>
+              <div class="input-style-info">
+                <div class="input-style-name">Frosted Card</div>
+                <div class="input-style-desc">Wider card with gradient border — 500 × 56 pt</div>
+              </div>
+              <div class="input-style-preview" style="background:var(--s2);border-color:var(--acc);"><div style="width:8px;height:8px;border:1px solid var(--b2);"></div><div class="preview-line"></div></div>
+            </div>
+            <div class="input-style-option">
+              <div class="radio-dot"></div>
+              <div class="input-style-info">
+                <div class="input-style-name">Cursor Anchored</div>
+                <div class="input-style-desc">Square tab anchors to cursor — 420 × 52 pt</div>
+              </div>
+              <div class="input-style-preview"><div style="width:8px;height:8px;background:var(--ok);"></div><div class="preview-line"></div></div>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Bubble Appearance</div>
+            <div class="bubble-grid">
+              <div class="bubble-option"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#5a7a6a,#1a2e2a);"></div><div class="bubble-num">01</div><div class="bubble-name">Aurora</div></div>
+              <div class="bubble-option"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#4a5a7a,#1a1e3a);"></div><div class="bubble-num">02</div><div class="bubble-name">Crystal</div></div>
+              <div class="bubble-option selected"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#4a4a8a,#1a1a4a);"></div><div class="bubble-num">03</div><div class="bubble-name">Ink Drop</div></div>
+              <div class="bubble-option"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#7a4a7a,#2e1a3a);"></div><div class="bubble-num">04</div><div class="bubble-name">Spectrum</div></div>
+              <div class="bubble-option"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#3a5a7a,#1a2a3a);width:20px;height:20px;top:calc(50% - 14px);"></div><div class="bubble-num">05</div><div class="bubble-name">Orbital</div></div>
+              <div class="bubble-option"><div class="bubble-orb" style="background:radial-gradient(circle at 35% 35%,#5a4a7a,#1a1a3a);border-radius:4px;"></div><div class="bubble-num">06</div><div class="bubble-name">Prism Card</div></div>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="slider-row">
+              <div class="slider-hdr"><div class="slider-name">Morph Speed</div><div class="slider-meta"><span class="slider-meta-val">3.0s</span></div></div>
+              <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">Blob cycle duration while working (lower = faster)</div>
+              <div class="slider-track"><div class="slider-fill" style="width:50%"></div><div class="slider-thumb" style="left:50%"></div></div>
+            </div>
+            <div class="slider-row">
+              <div class="slider-hdr"><div class="slider-name">Aggression at Rest</div><div class="slider-meta"><span class="slider-meta-val">0.18</span></div></div>
+              <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">Idle morph speed (0 = calm, 1 = full working speed)</div>
+              <div class="slider-track"><div class="slider-fill" style="width:18%"></div><div class="slider-thumb" style="left:18%"></div></div>
+            </div>
+            <div class="slider-row">
+              <div class="slider-hdr"><div class="slider-name">Glow Intensity</div><div class="slider-meta"><span class="slider-meta-val">0.45</span></div></div>
+              <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">Outer halo glow strength at rest (0 = dim, 1 = vivid)</div>
+              <div class="slider-track"><div class="slider-fill" style="width:45%"></div><div class="slider-thumb" style="left:45%"></div></div>
+            </div>
+            <div class="slider-row">
+              <div class="slider-hdr"><div class="slider-name">Bubble Size</div><div class="slider-meta"><span class="slider-meta-val">64pt</span></div></div>
+              <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">Visual diameter of the floating orb</div>
+              <div class="slider-track"><div class="slider-fill" style="width:55%"></div><div class="slider-thumb" style="left:55%"></div></div>
+            </div>
+            <div class="slider-row">
+              <div class="slider-hdr"><div class="slider-name">Opacity</div><div class="slider-meta"><span class="slider-meta-val">100%</span></div></div>
+              <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">Overall orb transparency (100% = fully solid, lower = frosted glass effect)</div>
+              <div class="slider-track"><div class="slider-fill" style="width:100%"></div><div class="slider-thumb" style="left:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec">
+<div class="sec-label">02 — Settings · General</div>
+<div class="row">
+  <div>
+    <div class="settings" style="height:580px;">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-hdr"><div class="settings-sidebar-title">Luma Settings</div></div>
+        <div class="settings-nav">
+          <div class="nav-item"><span class="nav-icon">👤</span>Account</div>
+          <div class="nav-item"><span class="nav-icon">🔑</span>API</div>
+          <div class="nav-item"><span class="nav-icon">⬜</span>Model</div>
+          <div class="nav-item"><span class="nav-icon">🔊</span>Voice</div>
+          <div class="nav-item"><span class="nav-icon">💬</span>Agents</div>
+          <div class="nav-item"><span class="nav-icon">🎨</span>Customization</div>
+          <div class="nav-item active"><span class="nav-icon">⚙</span>General</div>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-topbar"><button class="btn btn-pri">Done</button></div>
+        <div class="settings-body">
+          <div class="page-title">General</div>
+          <div class="page-sub">Open logs, app preferences, and maintenance actions.</div>
+          <div class="s-sec">
+            <div class="s-sec-label">Launch at Login</div>
+            <div class="s-row">
+              <div><div class="s-row-label">Start Luma automatically when you log in</div></div>
+              <div class="tog"></div>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">PIN</div>
+            <button class="btn-link">Set PIN</button>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Logs</div>
+            <div class="s-row-sub" style="margin-bottom:10px;">View real-time activity or copy the log file for debugging.</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost">📋 Open Log Window</button>
+              <button class="btn btn-ghost">Copy Logs</button>
+            </div>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Memory</div>
+            <div class="s-row-sub" style="margin-bottom:10px;">View and edit the global memory file Luma uses to remember preferences and facts between sessions.</div>
+            <button class="btn btn-ghost">🧠 Open Memory Editor</button>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">User Profile</div>
+            <div class="s-row-sub" style="margin-bottom:10px;">Luma observes every interaction and quietly builds a behavioral profile — your expertise, interests, and work patterns. This profile personalizes every response and is never shared.</div>
+            <button class="btn btn-ghost">👤 View Profile</button>
+          </div>
+          <div class="s-sec">
+            <div class="s-sec-label">Conversation History</div>
+            <div class="s-row-sub" style="margin-bottom:10px;">Browse all conversations stored by agents and the companion. Supports search and bulk deletion.</div>
+            <button class="btn btn-ghost">🕐 Open Conversation History</button>
+          </div>
+          <div style="text-align:center;padding:12px 0;border-top:1px solid var(--b);border-bottom:1px solid var(--b);margin-bottom:20px;">
+            <div style="font-size:12px;color:var(--t3);">Luma v1.0</div>
+            <div style="font-size:11px;color:var(--t3);">© 2026 Omoju Oluwamayowa (Nox)</div>
+          </div>
+          <div>
+            <div class="danger-label">⚠ Danger Zone</div>
+            <button class="btn btn-danger">Reset Luma</button>
+            <div style="font-size:11px;color:var(--t3);margin-top:6px;">Clears all settings, profiles, and conversation history. Cannot be undone.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════ 03 ONBOARDING ══════════════════ -->
+<div class="sec">
+<div class="sec-label">03 — Onboarding</div>
+<div class="row">
+  <div>
+    <div class="col-label">Step 1 — Welcome</div>
+    <div class="onboard">
+      <div class="ob-sidebar">
+        <div class="ob-logo">Luma</div>
+        <div class="ob-step active"><div class="ob-num active">1</div><div class="ob-step-name">Welcome</div></div>
+        <div class="ob-step"><div class="ob-num">2</div><div class="ob-step-name">Account</div></div>
+        <div class="ob-step"><div class="ob-num">3</div><div class="ob-step-name">Permissions</div></div>
+        <div class="ob-step"><div class="ob-num">4</div><div class="ob-step-name">API Keys</div></div>
+        <div class="ob-step"><div class="ob-num">5</div><div class="ob-step-name">Done</div></div>
+      </div>
+      <div class="ob-content">
+        <div class="ob-eyebrow">Step 01 / 05</div>
+        <div class="ob-title">Your AI companion<br>for macOS.</div>
+        <div class="ob-body">Luma lives in your menu bar. Hold <strong style="color:var(--t1);">⌃⌥</strong> to talk — it sees your screen, understands your context, and can control apps, run commands, and guide you through anything.<br><br>No subscriptions. No cloud storage. Your API keys, your data.</div>
+        <div class="ob-bottom">
+          <span class="ob-counter">01 / 05</span>
+          <button class="btn btn-pri">Get Started →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Step 3 — Permissions</div>
+    <div class="onboard">
+      <div class="ob-sidebar">
+        <div class="ob-logo">Luma</div>
+        <div class="ob-step"><div class="ob-num done">✓</div><div class="ob-step-name">Welcome</div></div>
+        <div class="ob-step"><div class="ob-num done">✓</div><div class="ob-step-name">Account</div></div>
+        <div class="ob-step active"><div class="ob-num active">3</div><div class="ob-step-name">Permissions</div></div>
+        <div class="ob-step"><div class="ob-num">4</div><div class="ob-step-name">API Keys</div></div>
+        <div class="ob-step"><div class="ob-num">5</div><div class="ob-step-name">Done</div></div>
+      </div>
+      <div class="ob-content">
+        <div class="ob-eyebrow">Step 03 / 05</div>
+        <div class="ob-title">Grant permissions.</div>
+        <div class="ob-body">
+          Luma needs a few permissions. All data stays on your Mac.
+          <br><br>
+          <div class="perm-row">
+            <div class="perm-left"><div class="perm-icon">🎥</div><div><div class="perm-name">Screen Recording</div><div class="perm-sub">See your screen to help you</div></div></div>
+            <span class="perm-status perm-ok">Granted</span>
+          </div>
+          <div class="perm-row">
+            <div class="perm-left"><div class="perm-icon">♿</div><div><div class="perm-name">Accessibility</div><div class="perm-sub">Read and interact with UI elements</div></div></div>
+            <span class="perm-status perm-ok">Granted</span>
+          </div>
+          <div class="perm-row">
+            <div class="perm-left"><div class="perm-icon">🎙</div><div><div class="perm-name">Microphone</div><div class="perm-sub">Push-to-talk voice input</div></div></div>
+            <span class="perm-status perm-pending">Pending</span>
+          </div>
+        </div>
+        <div class="ob-bottom">
+          <button class="btn btn-ghost">← Back</button>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="ob-counter">03 / 05</span>
+            <button class="btn btn-pri">Continue →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════ 04 FLOATING INPUT ══════════════════ -->
+<div class="sec">
+<div class="sec-label">04 — Floating Input</div>
+<div class="row">
+  <div>
+    <div class="col-label">Idle</div>
+    <div class="fi-pill">
+      <div class="fi-row">
+        <span class="fi-prompt">&gt;</span>
+        <input class="fi-input" placeholder="Ask Luma anything…">
+        <button class="fi-send">Send</button>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">With Response</div>
+    <div class="fi-pill" style="width:500px;">
+      <div class="fi-row">
+        <span class="fi-prompt">&gt;</span>
+        <input class="fi-input" value="Summarize what's on my screen">
+        <button class="fi-send">Send</button>
+      </div>
+      <div class="fi-response">
+        <div class="fi-res-hdr">Luma · Response</div>
+        Your screen shows Xcode with <code style="background:var(--s3);padding:1px 4px;font-family:var(--mono);font-size:11px;">CompanionPanelView.swift</code> open. The file is 1,053 lines and contains the main SwiftUI panel that renders in the menu bar dropdown.
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Cursor Anchored</div>
+    <div style="display:flex;align-items:flex-start;gap:8px;">
+      <div style="width:10px;height:10px;background:var(--ok);margin-top:11px;flex-shrink:0;"></div>
+      <div class="fi-pill" style="width:420px;">
+        <div class="fi-row">
+          <span class="fi-prompt">&gt;</span>
+          <input class="fi-input" placeholder="Ask Luma anything…">
+          <button class="fi-send">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════ 05 OVERLAY CURSOR BUBBLE ══════════════════ -->
+<div class="sec">
+<div class="sec-label">05 — Response Overlay / Cursor Bubble</div>
+<div class="row">
+  <div>
+    <div class="col-label">Responding</div>
+    <div class="overlay-scene">
+      <div class="overlay-bg-text">Desktop · Screen Overlay</div>
+      <div class="cursor-bubble-wrap">
+        <div class="cursor-sq"></div>
+        <div class="cursor-card">
+          <div class="cursor-hdr">
+            <div class="cursor-status-dot"></div>
+            <span class="cursor-label">Luma · Responding</span>
+            <div class="waveform"><div class="wbar" style="height:4px"></div><div class="wbar" style="height:9px"></div><div class="wbar" style="height:6px"></div><div class="wbar" style="height:12px"></div><div class="wbar" style="height:5px"></div><div class="wbar" style="height:8px"></div></div>
+          </div>
+          <div class="cursor-text">Click the <strong style="color:var(--acc);">Download</strong> button in the top-right corner of the window.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Idle</div>
+    <div class="overlay-scene" style="width:340px;">
+      <div class="overlay-bg-text">Desktop</div>
+      <div class="cursor-bubble-wrap">
+        <div class="cursor-sq" style="opacity:.3;"></div>
+        <div class="cursor-card" style="opacity:.5;">
+          <div class="cursor-hdr">
+            <div class="cursor-status-dot" style="background:var(--t3);"></div>
+            <span class="cursor-label">Luma · Idle</span>
+          </div>
+          <div class="cursor-text" style="color:var(--t3);">Hold ⌃⌥ to talk</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════ 06 AGENT DOCK BUBBLE ══════════════════ -->
+<div class="sec">
+<div class="sec-label">06 — Agent Dock Bubble</div>
+<div class="row">
+  <div>
+    <div class="col-label">Working</div>
+    <div class="agent-bubble">
+      <div class="ab-hdr" style="border-left-color:var(--warn);">
+        <span class="ab-title">Accident Causation…</span>
+        <div class="ab-actions">
+          <span class="pill-tag warn">Working</span>
+          <div class="ab-x">×</div>
+        </div>
+      </div>
+      <div class="ab-body">Starting…</div>
+      <div class="ab-redirect">
+        <div class="ab-redirect-label">Redirect Agent</div>
+        <div class="ab-redirect-row">
+          <input class="ab-redirect-input" placeholder="Assign new task (stops current)…">
+          <div class="ab-icon">🎤</div>
+          <div class="ab-icon">×</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Done</div>
+    <div class="agent-bubble" style="border-left-color:var(--ok);">
+      <div class="ab-hdr" style="border-left-color:var(--ok);">
+        <span class="ab-title">Write CHANGELOG</span>
+        <div class="ab-actions">
+          <span class="pill-tag ok">Done</span>
+          <div class="ab-x">×</div>
+        </div>
+      </div>
+      <div class="ab-body has-text">Created CHANGELOG.txt with full version history from Origins through v0.5.3.</div>
+      <div class="ab-redirect">
+        <div class="ab-redirect-label">Redirect Agent</div>
+        <div class="ab-redirect-row">
+          <input class="ab-redirect-input" placeholder="Assign new task…">
+          <div class="ab-icon">🎤</div>
+          <div class="ab-icon">×</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Error</div>
+    <div class="agent-bubble">
+      <div class="ab-hdr" style="border-left-color:var(--err);">
+        <span class="ab-title">Deploy to Prod</span>
+        <div class="ab-actions">
+          <span class="pill-tag err">Failed</span>
+          <div class="ab-x">×</div>
+        </div>
+      </div>
+      <div class="ab-body has-text" style="color:var(--err);opacity:.8;">Permission denied: /opt/homebrew/bin/claude</div>
+      <div class="ab-redirect">
+        <div class="ab-redirect-label">Redirect Agent</div>
+        <div class="ab-redirect-row">
+          <input class="ab-redirect-input" placeholder="Assign new task…">
+          <div class="ab-icon">🎤</div>
+          <div class="ab-icon">×</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════ 07 COMPONENT TOKENS ══════════════════ -->
+<div class="sec">
+<div class="sec-label">07 — Components</div>
+<div class="row">
+  <div class="token-card">
+    <div class="token-card-label">Buttons</div>
+    <div class="btn-showcase"><button class="btn btn-pri">Primary</button><button class="btn btn-ghost">Ghost</button><button class="btn btn-danger">Danger</button></div>
+    <div class="btn-showcase"><button class="btn btn-pri" style="font-size:9px;padding:4px 10px;">Sm Primary</button><button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;">Sm Ghost</button></div>
+  </div>
+  <div class="token-card">
+    <div class="token-card-label">Status</div>
+    <div class="status-list">
+      <div class="status-item"><div class="status-sq" style="background:var(--ok);"></div><span class="mono-sm" style="color:var(--ok);">Active / Granted</span></div>
+      <div class="status-item"><div class="status-sq" style="background:var(--warn);"></div><span class="mono-sm" style="color:var(--warn);">Working / Pending</span></div>
+      <div class="status-item"><div class="status-sq" style="background:var(--err);"></div><span class="mono-sm" style="color:var(--err);">Error / Failed</span></div>
+      <div class="status-item"><div class="status-sq" style="background:var(--t3);"></div><span class="mono-sm">Idle</span></div>
+    </div>
+  </div>
+  <div class="token-card">
+    <div class="token-card-label">Toggles</div>
+    <div class="tog-showcase">
+      <div class="tog-item"><div class="tog on"></div><span class="mono-sm">On</span></div>
+      <div class="tog-item"><div class="tog"></div><span class="mono-sm">Off</span></div>
+    </div>
+  </div>
+  <div class="token-card">
+    <div class="token-card-label">Badges</div>
+    <div class="badge-showcase">
+      <span class="pill-tag active">v0.5.3</span>
+      <span class="pill-tag warn">Beta</span>
+      <span class="pill-tag ok">Free</span>
+      <span class="pill-tag ok">Granted</span>
+      <span class="pill-tag err">Denied</span>
+      <span class="pill-tag">Idle</span>
+    </div>
+  </div>
+  <div class="token-card">
+    <div class="token-card-label">Typography</div>
+    <div class="type-showcase">
+      <div style="font-size:20px;font-weight:600;color:var(--t1);">Headline</div>
+      <div style="font-size:13px;color:var(--t1);">Body text</div>
+      <div style="font-size:12px;color:var(--t2);">Secondary</div>
+      <div class="mono-sm">Mono Label</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--t2);">code / key</div>
+    </div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

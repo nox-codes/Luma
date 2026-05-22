@@ -1,0 +1,22 @@
+LUMA RELEASE STEPS
+==================
+
+1. Export .app from Xcode (Product → Archive → Distribute → Developer ID → Export)
+2. Wrap .app in DMG using DMG Canvas → save as Luma.dmg
+3. Drop Luma.dmg into ~/Desktop/luma-releases/
+4. Ask Claude to run generate_appcast (it handles the long path)
+5. Claude fixes the URL and copies appcast.xml to this repo folder
+6. git add appcast.xml && git commit -m "release: vX.X.X appcast" && git push
+7. Create GitHub Release tagged vX.X.X, upload Luma.dmg as the release asset
+
+GENERATE APPCAST COMMAND (run from Claude or paste into terminal as ONE line)
+==============================================================================
+/Users/nox/Library/Developer/Xcode/DerivedData/Luma-chgarovtepxbwkgrbilwxmazfhbz/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast /Users/nox/Desktop/luma-releases/
+
+THEN copy + fix URL:
+sed 's|https://raw.githubusercontent.com/nox-codes/Luma/main/Luma.dmg|https://github.com/nox-codes/Luma/releases/download/vX.X.X/Luma.dmg|' /Users/nox/Desktop/luma-releases/appcast.xml > /Users/nox/Desktop/luma/appcast.xml
+
+(replace vX.X.X with actual version number)
+
+NOTE: DerivedData path may change after a clean build. If the command fails,
+ask Claude to find the new path with: find ~/Library/Developer/Xcode/DerivedData -name "generate_appcast"

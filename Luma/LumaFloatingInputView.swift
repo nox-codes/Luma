@@ -126,9 +126,9 @@ private struct StreamingDot: View {
     @State private var opacity: Double = 0.3
 
     var body: some View {
-        Circle()
-            .fill(Color(hex: "#4caf50"))
-            .frame(width: 5, height: 5)
+        Rectangle()
+            .fill(Color.white.opacity(0.7))
+            .frame(width: 4, height: 4)
             .opacity(opacity)
             .onAppear {
                 withAnimation(
@@ -225,32 +225,14 @@ private struct PillCleanFloatingInput: View {
 
     @ObservedObject private var panelState = FloatingPanelState.shared
 
-    /// Morphs between capsule (100) and rounded-rect (26) as the response appears.
-    /// SwiftUI's RoundedRectangle caps the radius at min(width, height)/2 for the
-    /// compact 52pt height, so cornerRadius 100 visually equals a true capsule.
-    private var containerCornerRadius: CGFloat {
-        panelState.response.isEmpty ? 100 : 26
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             // Input row
             HStack(spacing: 10) {
-                // Green orb — indicates Luma is ready and listening
-                ZStack {
-                    Circle()
-                        .fill(Color(hex: "#4caf50").opacity(0.18))
-                        .frame(width: 24, height: 24)
-                    Circle()
-                        .fill(Color(hex: "#4caf50"))
-                        .frame(width: 8, height: 8)
-                        .shadow(color: Color(hex: "#4caf50").opacity(0.7), radius: 4, x: 0, y: 0)
-                }
-                .overlay(
-                    Circle()
-                        .stroke(Color(hex: "#4caf50").opacity(0.35), lineWidth: 1)
-                        .frame(width: 24, height: 24)
-                )
+                // White square indicator — shows Luma is ready
+                Rectangle()
+                    .fill(Color.white.opacity(0.85))
+                    .frame(width: 6, height: 6)
 
                 LumaDirectTextField(
                     text: $panelState.draft,
@@ -265,7 +247,7 @@ private struct PillCleanFloatingInput: View {
                         .foregroundColor(Color(hex: "#141614"))
                         .frame(width: 30, height: 30)
                         .background(panelState.draft.isEmpty ? Color.white.opacity(0.25) : Color.white)
-                        .clipShape(Circle())
+                        .clipShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(panelState.draft.isEmpty)
@@ -278,23 +260,21 @@ private struct PillCleanFloatingInput: View {
             .padding(.trailing, 10)
             .frame(width: 440, height: 52)
 
-            // Response area — slides in below the input inside the same pill container
+            // Response area — slides in below the input inside the same container
             if !panelState.response.isEmpty {
                 FloatingResponseArea()
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
+            Rectangle()
                 .fill(Color(hex: "#141614"))
-                .shadow(color: Color(hex: "#4caf50").opacity(0.12), radius: 20, x: 0, y: 0)
                 .overlay(
-                    RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
-                        .stroke(Color(hex: "#4caf50").opacity(0.28), lineWidth: 1)
+                    Rectangle()
+                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
                 )
         )
-        .clipShape(RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous))
-        // Spring animation drives both the shape morph and the response area slide-in
+        .shadow(color: Color.black.opacity(0.4), radius: 20, x: 0, y: 8)
         .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
         .preferredColorScheme(.dark)
     }
@@ -322,10 +302,10 @@ private struct WiderCardFloatingInput: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        Rectangle()
                             .fill(Color(hex: "#1A1C1A"))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                Rectangle()
                                     .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                             )
                     )
@@ -349,8 +329,8 @@ private struct WiderCardFloatingInput: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(panelState.draft.isEmpty ? Color.black.opacity(0.4) : .black)
                         .frame(width: 34, height: 34)
-                        .background(panelState.draft.isEmpty ? Color(hex: "#4caf50").opacity(0.35) : Color(hex: "#4caf50"))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(panelState.draft.isEmpty ? Color.white.opacity(0.25) : Color.white)
+                        .clipShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(panelState.draft.isEmpty)
@@ -368,32 +348,14 @@ private struct WiderCardFloatingInput: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color(hex: "#0E1210"))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(hex: "#0E0F0E"))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [
-                            Color(hex: "#4caf50").opacity(0.6),
-                            Color(hex: "#4caf50").opacity(0.05),
-                            Color(hex: "#4caf50").opacity(0.3),
-                            Color(hex: "#4caf50").opacity(0.6),
-                        ]),
-                        center: .center,
-                        angle: .degrees(gradientRotation)
-                    ),
-                    lineWidth: 1.5
-                )
+            Rectangle()
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.5), radius: 24, x: 0, y: 8)
         .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
         .preferredColorScheme(.dark)
-        .onAppear {
-            withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
-                gradientRotation = 360
-            }
-        }
     }
 }
 
@@ -409,12 +371,11 @@ private struct CursorAnchoredFloatingInput: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Green anchor tab — sits flush above the input body
+            // White anchor tab — sits flush above the input body
             HStack {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color(hex: "#4caf50"))
-                    .frame(width: 42, height: 14)
-                    .shadow(color: Color(hex: "#4caf50").opacity(0.5), radius: 6, x: 0, y: -2)
+                Rectangle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 42, height: 4)
                 Spacer()
             }
             .padding(.leading, 16)
@@ -436,7 +397,7 @@ private struct CursorAnchoredFloatingInput: View {
                             .foregroundColor(Color(hex: "#141614"))
                             .frame(width: 30, height: 30)
                             .background(panelState.draft.isEmpty ? Color.white.opacity(0.25) : Color.white)
-                            .clipShape(Circle())
+                            .clipShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(panelState.draft.isEmpty)
@@ -455,26 +416,10 @@ private struct CursorAnchoredFloatingInput: View {
                 }
             }
             .background(Color(hex: "#141614"))
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 0,
-                    bottomLeadingRadius: 16,
-                    bottomTrailingRadius: 16,
-                    topTrailingRadius: 16,
-                    style: .continuous
-                )
-            )
             .overlay(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 0,
-                    bottomLeadingRadius: 16,
-                    bottomTrailingRadius: 16,
-                    topTrailingRadius: 16,
-                    style: .continuous
-                )
-                .stroke(Color(hex: "#4caf50").opacity(0.3), lineWidth: 1)
+                Rectangle()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
             )
-            .shadow(color: Color(hex: "#4caf50").opacity(0.08), radius: 20, x: 0, y: 0)
             .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: panelState.response.isEmpty)
         }

@@ -32,10 +32,10 @@ struct LumaTheme {
 
     // MARK: Accent
 
-    /// Primary accent — blue #2563EB matching the design spec.
-    static let accent           = Color(hex: "#2563EB")
-    /// Foreground drawn on top of accent-colored buttons (white text on blue).
-    static let accentForeground = Color(hex: "#FFFFFF")
+    /// Primary accent — white, matching the retro monochrome aesthetic.
+    static let accent           = Color(hex: "#FFFFFF")
+    /// Foreground drawn on top of accent-colored buttons (near-black text on white).
+    static let accentForeground = Color(hex: "#111111")
 
     // MARK: Semantic
 
@@ -181,11 +181,11 @@ struct LumaTheme {
 
     // MARK: Corner Radius
 
-    static let radiusSM:   CGFloat = 6
-    static let radiusMD:   CGFloat = 10
-    static let radiusLG:   CGFloat = 16
-    static let radiusXL:   CGFloat = 20
-    static let radiusFull: CGFloat = 999
+    static let radiusSM:   CGFloat = 0
+    static let radiusMD:   CGFloat = 0
+    static let radiusLG:   CGFloat = 0
+    static let radiusXL:   CGFloat = 0
+    static let radiusFull: CGFloat = 0
 
     // MARK: Animation Durations (seconds)
 

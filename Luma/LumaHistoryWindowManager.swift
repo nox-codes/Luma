@@ -133,15 +133,16 @@ struct LumaHistoryWindowView: View {
                         .foregroundColor(.secondary)
                     TextField("Search history...", text: $searchQuery)
                         .textFieldStyle(.plain)
+                        .tint(.white)
                         .font(.system(size: 12))
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .frame(minWidth: 200)
                 .background(Color(NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(Rectangle())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    Rectangle()
                         .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                 )
 
@@ -161,9 +162,9 @@ struct LumaHistoryWindowView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color.red.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(Rectangle())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    Rectangle()
                         .stroke(Color.red.opacity(0.35), lineWidth: 1)
                 )
                 .onHover { hovering in
@@ -255,7 +256,7 @@ struct LumaHistoryWindowView: View {
                                 ? Color(red: 0.24, green: 0.47, blue: 0.95)
                                 : Color.secondary.opacity(0.50)
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .clipShape(Rectangle())
 
                     // Agent name in muted text
                     Text(entry.agentTitle)
@@ -294,7 +295,7 @@ struct LumaHistoryWindowView: View {
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.60))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in

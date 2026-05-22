@@ -228,7 +228,6 @@ final class CompanionResponseOverlayManager {
 
 private struct CompanionResponseOverlayView: View {
     @ObservedObject var viewModel: CompanionResponseOverlayViewModel
-    @State private var borderHueRotation: Double = 0
 
     var body: some View {
         if viewModel.isShowingResponse {
@@ -243,36 +242,14 @@ private struct CompanionResponseOverlayView: View {
             .background(
                 ZStack {
                     VisualEffectBlurView()
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     Color(red: 10/255, green: 10/255, blue: 15/255, opacity: 0.85)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        AngularGradient(
-                            gradient: Gradient(colors: [
-                                Color(hex: "#0A84FF"),
-                                Color(hex: "#BF5AF2"),
-                                Color(hex: "#FF375F"),
-                                Color(hex: "#FF9F0A"),
-                                Color(hex: "#30D158"),
-                                Color(hex: "#0A84FF"),
-                            ]),
-                            center: .center
-                        ),
-                        lineWidth: 1.0
-                    )
-                    .hueRotation(.degrees(borderHueRotation))
-                    .opacity(0.58)
+                Rectangle()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1.0)
             )
             .shadow(color: Color.black.opacity(0.4), radius: 14, x: 0, y: 9)
-            .onAppear {
-                withAnimation(.linear(duration: 8.0).repeatForever(autoreverses: false)) {
-                    borderHueRotation = 360
-                }
-            }
         }
     }
 

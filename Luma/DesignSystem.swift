@@ -11,6 +11,7 @@ import SwiftUI
 import AppKit
 
 enum LumaAccentTheme: String, CaseIterable, Identifiable {
+    case white
     case blue
     case mint
     case amber
@@ -22,6 +23,8 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .white:
+            return "White"
         case .blue:
             return "Blue"
         case .mint:
@@ -35,6 +38,8 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
 
     var accent: Color {
         switch self {
+        case .white:
+            return Color(hex: "#FFFFFF")
         case .blue:
             return Color(hex: "#2563EB")
         case .mint:
@@ -48,6 +53,8 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
 
     var accentHover: Color {
         switch self {
+        case .white:
+            return Color(hex: "#D4D4D4")
         case .blue:
             return Color(hex: "#1D4ED8")
         case .mint:
@@ -61,6 +68,8 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
 
     var accentText: Color {
         switch self {
+        case .white:
+            return Color(hex: "#FFFFFF")
         case .blue:
             return Color(hex: "#60A5FA")
         case .mint:
@@ -74,6 +83,8 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
 
     var cursorColor: Color {
         switch self {
+        case .white:
+            return Color(hex: "#FFFFFF")
         case .blue:
             return Color(hex: "#3380FF")
         case .mint:
@@ -85,13 +96,24 @@ enum LumaAccentTheme: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Text color drawn on top of an accent-filled button.
+    /// White buttons require near-black text for contrast; all others use white.
+    var textOnAccent: Color {
+        switch self {
+        case .white:
+            return Color(hex: "#111111")
+        default:
+            return .white
+        }
+    }
+
     var accentSubtle: Color {
         accent.opacity(0.12)
     }
 
     static var current: LumaAccentTheme {
-        let rawValue = UserDefaults.standard.string(forKey: userDefaultsKey) ?? LumaAccentTheme.blue.rawValue
-        return LumaAccentTheme(rawValue: rawValue) ?? .blue
+        let rawValue = UserDefaults.standard.string(forKey: userDefaultsKey) ?? LumaAccentTheme.white.rawValue
+        return LumaAccentTheme(rawValue: rawValue) ?? .white
     }
 }
 
@@ -143,10 +165,9 @@ enum DS {
         /// Tertiary text — very muted, used for section labels, timestamps, disabled text.
         static let textTertiary = Color(hex: "#555D58")
 
-        /// Text used on top of the accent fill (#2563eb blue), like the primary button label.
-        /// White on #2563eb achieves ~5.1:1 contrast — WCAG AA compliant.
-        /// White on #1d4ed8 hover achieves ~6.5:1 — also WCAG AA compliant.
-        static let textOnAccent: Color = .white
+        /// Text drawn on top of an accent-filled button.
+        /// White themes use near-black (#111111) for contrast; all other accent colors use white.
+        static var textOnAccent: Color { LumaAccentTheme.current.textOnAccent }
 
         // ── Tailwind Blue Scale ─────────────────────────────────────
         // Full Tailwind CSS v4 blue palette for consistent blue usage.
@@ -289,15 +310,15 @@ enum DS {
 
     enum CornerRadius {
         /// Small elements like tags, badges.
-        static let small: CGFloat = 6
+        static let small: CGFloat = 0
         /// Buttons, input fields, small cards.
-        static let medium: CGFloat = 8
+        static let medium: CGFloat = 0
         /// Cards, dialogs, chat bubbles.
-        static let large: CGFloat = 10
+        static let large: CGFloat = 0
         /// Large panels, permission cards.
-        static let extraLarge: CGFloat = 12
-        /// Pill-shaped buttons (the continue button).
-        static let pill: CGFloat = .infinity
+        static let extraLarge: CGFloat = 0
+        /// Pill-shaped buttons.
+        static let pill: CGFloat = 0
     }
 
     // MARK: - Animation Durations
@@ -330,25 +351,12 @@ enum DS {
 // MARK: - Button Styles
 
 /// Primary button — the main call-to-action per screen.
-/// Accent-colored background with white text. One per view maximum.
+/// Accent-colored background with contrasting text. One per view maximum.
 /// Used for: "start"/"resume", "let's go", "continue", "verify completion".
 struct DSPrimaryButtonStyle: ButtonStyle {
     var isFullWidth: Bool = true
 
     @State private var isHovered = false
-
-    // Separate state for the scale expansion so it animates on a slower,
-    // more gradual timeline (0.6s) than the background color snap (0.15s).
-    @State private var isHoverScaleExpanded = false
-
-    // Whether the hover glow shadow is active. Builds up gradually (0.6s)
-    // on hover entry, fades out faster (0.3s) on exit.
-    @State private var isHoverGlowActive = false
-
-    // Continuously toggles while hovered to drive a gentle breathing pulse
-    // in the glow shadow. Creates a living, organic feel — like the button
-    // is softly glowing, not just statically lit.
-    @State private var isGlowBreathingIn = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -358,61 +366,21 @@ struct DSPrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 14)
             .padding(.horizontal, isFullWidth ? 0 : 20)
             .background(
-                Capsule()
+                Rectangle()
                     .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
             )
-            // Hover glow — builds up gradually, then gently breathes while hovered.
-            // The breathing oscillates opacity and radius on a slow 2.5s loop,
-            // creating a candle-flame-like "alive" quality rather than a static highlight.
-            .shadow(
-                color: DS.Colors.accent.opacity(
-                    isHoverGlowActive ? (isGlowBreathingIn ? 0.32 : 0.18) : 0
-                ),
-                radius: isHoverGlowActive ? (isGlowBreathingIn ? 16 : 10) : 0
-            )
-            // Hover: gradually expand to 1.03. Press: snap down to 0.97.
-            .scaleEffect(configuration.isPressed ? 0.97 : (isHoverScaleExpanded ? 1.03 : 1.0))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
             .onHover { hovering in
-                // Background color — fast snap so the button feels responsive
-                withAnimation(.easeOut(duration: 0.15)) {
-                    isHovered = hovering
-                }
-
-                // Scale — slow, gradual expansion (like the button is swelling)
-                withAnimation(.easeInOut(duration: hovering ? 0.6 : 0.3)) {
-                    isHoverScaleExpanded = hovering
-                }
-
-                // Glow — builds up gradually on entry, fades faster on exit
-                withAnimation(.easeInOut(duration: hovering ? 0.6 : 0.3)) {
-                    isHoverGlowActive = hovering
-                }
-
-                // Breathing glow loop — gentle pulse while hovered.
-                // The 2.5s cycle keeps it feeling organic, not mechanical.
-                if hovering {
-                    withAnimation(
-                        .easeInOut(duration: 2.5)
-                        .repeatForever(autoreverses: true)
-                    ) {
-                        isGlowBreathingIn = true
-                    }
-                } else {
-                    // Override the repeating animation with a finite one to stop cleanly
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        isGlowBreathingIn = false
-                    }
-                }
-
+                isHovered = hovering
                 if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
     }
 
     private func buttonBackgroundColor(isPressed: Bool) -> Color {
         if isPressed {
-            // Pressed: brighten slightly beyond hover
-            return DS.Colors.accentHover.blendedWithWhite(fraction: DS.StateLayer.pressed)
+            return DS.Colors.accentHover
         } else if isHovered {
             return DS.Colors.accentHover
         } else {
@@ -437,7 +405,7 @@ struct DSSecondaryButtonStyle: ButtonStyle {
             .padding(.vertical, 12)
             .padding(.horizontal, isFullWidth ? 0 : 16)
             .background(
-                Capsule()
+                Rectangle()
                     .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -479,7 +447,7 @@ struct DSTertiaryButtonStyle: ButtonStyle {
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .background(
-                Capsule()
+                Rectangle()
                     .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -545,11 +513,11 @@ struct DSOutlinedButtonStyle: ButtonStyle {
             .padding(.vertical, 12)
             .padding(.horizontal, isFullWidth ? 0 : 16)
             .background(
-                Capsule()
+                Rectangle()
                     .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
             )
             .overlay(
-                Capsule()
+                Rectangle()
                     .stroke(
                         borderColor(isPressed: configuration.isPressed),
                         lineWidth: 1
@@ -599,11 +567,11 @@ struct DSDestructiveButtonStyle: ButtonStyle {
             .padding(.vertical, 10)
             .padding(.horizontal, 16)
             .background(
-                Capsule()
+                Rectangle()
                     .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
             )
             .overlay(
-                Capsule()
+                Rectangle()
                     .stroke(
                         borderColor(isPressed: configuration.isPressed),
                         lineWidth: 1
@@ -660,17 +628,17 @@ struct DSIconButtonStyle: ButtonStyle {
             .foregroundColor(iconColor(isPressed: configuration.isPressed))
             .frame(width: size, height: size)
             .background(
-                Circle()
+                Rectangle()
                     .fill(circleBackgroundColor(isPressed: configuration.isPressed))
             )
             .overlay(
-                Circle()
+                Rectangle()
                     .stroke(circleBorderColor(isPressed: configuration.isPressed), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.93 : 1.0)
             .animation(.easeOut(duration: DS.Animation.fast), value: configuration.isPressed)
             .animation(.easeOut(duration: DS.Animation.fast), value: isHovered)
-            .contentShape(Circle())
+            .contentShape(Rectangle())
             // Cursor change via AppKit cursor rects — more reliable than NSCursor.push/pop
             // because cursor rects are managed at the window level and don't conflict
             // with SwiftUI's internal cursor handling.
@@ -786,6 +754,99 @@ struct DSIconButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Retro Toggle Style
+
+/// A square sliding toggle that matches the retro monochrome aesthetic.
+/// Off: empty rectangle with white border + white thumb on the left.
+/// On:  white-filled rectangle with dark thumb on the right.
+struct RetroToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                configuration.isOn.toggle()
+            }
+        } label: {
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                // Track
+                Rectangle()
+                    .fill(configuration.isOn ? DS.Colors.accent : Color.clear)
+                    .frame(width: 36, height: 20)
+                    .overlay(Rectangle().stroke(DS.Colors.accent, lineWidth: 1))
+
+                // Thumb — dark on white when on, white when off
+                Rectangle()
+                    .fill(configuration.isOn ? DS.Colors.textOnAccent : DS.Colors.accent)
+                    .frame(width: 14, height: 16)
+                    .padding(.horizontal, 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+    }
+}
+
+// MARK: - Retro Slider
+
+/// A drag-based slider with a rectangular track and square thumb,
+/// matching the retro monochrome aesthetic.
+struct RetroSlider: View {
+
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 0
+    var tintColor: Color = DS.Colors.accent
+
+    private var fraction: Double {
+        guard range.upperBound > range.lowerBound else { return 0 }
+        return (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let trackWidth = geometry.size.width
+            let thumbSize: CGFloat = 12
+            let filledWidth = CGFloat(fraction) * trackWidth
+            // Clamp thumb so it never overflows the track bounds.
+            let thumbOffset = max(0, min(filledWidth - thumbSize / 2, trackWidth - thumbSize))
+
+            ZStack(alignment: .leading) {
+                // Track background
+                Rectangle()
+                    .fill(tintColor.opacity(0.12))
+                    .frame(height: 3)
+                    .overlay(Rectangle().stroke(tintColor.opacity(0.4), lineWidth: 0.5))
+
+                // Filled portion
+                Rectangle()
+                    .fill(tintColor)
+                    .frame(width: max(0, filledWidth), height: 3)
+
+                // Square thumb
+                Rectangle()
+                    .fill(tintColor)
+                    .frame(width: thumbSize, height: thumbSize)
+                    .offset(x: thumbOffset)
+            }
+            .frame(height: thumbSize)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let rawFraction = drag.location.x / trackWidth
+                        let clampedFraction = max(0, min(1, rawFraction))
+                        var newValue = range.lowerBound + clampedFraction * (range.upperBound - range.lowerBound)
+                        if step > 0 {
+                            newValue = (newValue / step).rounded() * step
+                        }
+                        value = max(range.lowerBound, min(range.upperBound, newValue))
+                    }
+            )
+        }
+        .frame(height: 12)
+        .pointerCursor()
+    }
+}
+
 // MARK: - Convenience View Extensions
 
 extension View {
@@ -843,6 +904,23 @@ enum LumaComposerVisualStyle {
     static let waveformLeadingColor = Color(hex: "#F3FBFF")
     static let waveformTrailingColor = Color(hex: "#8FD2FF")
     static let waveformGlowColor = Color(hex: "#AEE3FF")
+}
+
+// MARK: - Window Drag Handle (AppKit Bridge)
+
+/// Transparent NSView that calls window.performDrag(with:) on mouseDown.
+/// Place this as a .background() on any area that should drag the window
+/// (typically the title bar / top strip). Interactive SwiftUI controls placed
+/// ABOVE it in the z-order still receive their own mouse events normally.
+class WindowDragHandleNSView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
+    }
+}
+
+struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowDragHandleNSView { WindowDragHandleNSView() }
+    func updateNSView(_ nsView: WindowDragHandleNSView, context: Context) {}
 }
 
 // MARK: - Pointer Cursor (AppKit Bridge)

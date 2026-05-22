@@ -1161,7 +1161,7 @@ struct RichMarkdownView: View {
                 Rectangle()
                     .fill(accentColor.opacity(0.55))
                     .frame(width: 2)
-                    .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
+                    .clipShape(Rectangle())
                 Text(lumaMarkdown(quoteText))
                     .font(.system(size: 11))
                     .foregroundColor(Color.white.opacity(0.60))
@@ -1210,9 +1210,9 @@ struct RichMarkdownView: View {
                 .padding(.bottom, 7)
         }
         .background(Color.black.opacity(0.40))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .clipShape(Rectangle())
         .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            Rectangle()
                 .stroke(accentColor.opacity(0.20), lineWidth: 1)
         )
     }
@@ -1283,9 +1283,9 @@ struct RichMarkdownView: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .clipShape(Rectangle())
         .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            Rectangle()
                 .stroke(accentColor.opacity(0.22), lineWidth: 1)
         )
     }
@@ -1619,11 +1619,11 @@ private struct MorphingAgentBubbleView: View {
                 .opacity(Double(expansionProgress))
         }
         .frame(width: currentWidth, height: currentHeight)
-        .clipShape(RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous))
+        .clipShape(Rectangle())
         // Specular highlight: white gradient ring visible on the collapsed orb,
         // fades out as the morph progresses toward the card form.
         .overlay(
-            RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous)
+            Rectangle()
                 .stroke(
                     LinearGradient(
                         colors: [Color.white.opacity(0.38), Color.white.opacity(0.04)],
@@ -1636,7 +1636,7 @@ private struct MorphingAgentBubbleView: View {
         )
         // Card border: solid design-system border colour, fades in as the morph completes.
         .overlay(
-            RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous)
+            Rectangle()
                 .stroke(Color(hex: "#2E322E"), lineWidth: 1.0)
                 .opacity(Double(expansionProgress))
         )
@@ -1877,13 +1877,12 @@ private struct MorphingAgentBubbleView: View {
             // borderRadius:'0 3px 3px 0' from JSX = small trailing corner radius.
             VStack(spacing: 0) {
                 Color.clear.frame(height: 14)
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                Rectangle()
                     .fill(LinearGradient(
                         colors: [session.glowColor, session.glowColor.opacity(0.60)],
                         startPoint: .top,
                         endPoint: .bottom
                     ))
-                    .shadow(color: session.glowColor.opacity(0.55), radius: 5)
                 Color.clear.frame(height: 14)
             }
             .frame(width: 3)
@@ -1917,7 +1916,7 @@ private struct MorphingAgentBubbleView: View {
 
             // Dismiss button
             Button(action: onDismiss) {
-                Text("✕")
+                Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(hex: "#9BA39D"))
             }
@@ -2059,7 +2058,7 @@ private struct MorphingAgentBubbleView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .background(session.glowColor)
-                                .clipShape(Capsule())
+                                .clipShape(Rectangle())
                             }
                             Spacer()
                         }
@@ -2095,6 +2094,7 @@ private struct MorphingAgentBubbleView: View {
                             text: $followUpInputText
                         )
                         .textFieldStyle(.plain)
+                        .tint(DS.Colors.accent)
                         .font(.system(size: 11))
                         .foregroundColor(Color(hex: "#ECEEED").opacity(sessionIsRunning ? 0.40 : 0.85))
                         .disabled(sessionIsRunning)
@@ -2111,7 +2111,7 @@ private struct MorphingAgentBubbleView: View {
                                 )
                                 .frame(width: 22, height: 22)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    Rectangle()
                                         .fill(
                                             physicsState.isVoiceRecording
                                                 ? Color(hex: "#FF6369").opacity(0.15)
@@ -2119,7 +2119,7 @@ private struct MorphingAgentBubbleView: View {
                                         )
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    Rectangle()
                                         .stroke(
                                             physicsState.isVoiceRecording
                                                 ? Color(hex: "#FF6369").opacity(0.35)
@@ -2138,11 +2138,11 @@ private struct MorphingAgentBubbleView: View {
                                     .foregroundColor(cancelTapCount > 0 ? .white : Color(hex: "#9BA39D"))
                                     .frame(width: 22, height: 22)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        Rectangle()
                                             .fill(cancelTapCount > 0 ? Color.red.opacity(0.65) : Color(hex: "#282B28"))
                                     )
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        Rectangle()
                                             .stroke(
                                                 cancelTapCount > 0
                                                     ? Color.red.opacity(0.50)
@@ -2159,11 +2159,11 @@ private struct MorphingAgentBubbleView: View {
                                     .foregroundColor(inputIsEmpty ? Color(hex: "#555D58") : .white)
                                     .frame(width: 22, height: 22)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        Rectangle()
                                             .fill(inputIsEmpty ? Color(hex: "#282B28") : session.glowColor)
                                     )
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        Rectangle()
                                             .stroke(
                                                 inputIsEmpty ? Color(hex: "#2E322E") : session.glowColor,
                                                 lineWidth: 1
@@ -2177,9 +2177,9 @@ private struct MorphingAgentBubbleView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(Color(hex: "#212421"))
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .clipShape(Rectangle())
                     .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        Rectangle()
                             .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                     )
                 }
@@ -2274,7 +2274,7 @@ private struct MorphingAgentBubbleView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 10))
                         .foregroundColor(Color(red: 0.20, green: 0.83, blue: 0.60))
-                    Text("Done ✓")
+                    Text("Done")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(Color(red: 0.20, green: 0.83, blue: 0.60))
                 }
@@ -2310,7 +2310,7 @@ private struct MorphingAgentBubbleView: View {
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(hex: "#1A1C1A"))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(Rectangle())
             }
 
             // ── Output in monospace — last lines of stdout/stderr ────────────────
@@ -2324,9 +2324,9 @@ private struct MorphingAgentBubbleView: View {
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(hex: "#1A1C1A"))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(Rectangle())
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        Rectangle()
                             .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                     )
             } else if sessionIsRunning {
@@ -2338,7 +2338,7 @@ private struct MorphingAgentBubbleView: View {
                     .padding(.vertical, 5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(hex: "#1A1C1A"))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(Rectangle())
             }
         }
     }
@@ -2372,14 +2372,13 @@ private struct MorphingAgentBubbleView: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    Rectangle()
                         .fill(Color.white.opacity(0.08))
                         .frame(height: 3)
 
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    Rectangle()
                         .fill(session.glowColor)
                         .frame(width: geometry.size.width * completedFraction, height: 3)
-                        .shadow(color: session.glowColor.opacity(0.60), radius: 4)
                         .animation(.easeInOut(duration: 0.4), value: completedFraction)
                 }
             }
@@ -2395,9 +2394,9 @@ private struct MorphingAgentBubbleView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .background(Color(hex: "#1A1C1A"))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(Rectangle())
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            Rectangle()
                 .stroke(Color(hex: "#2E322E"), lineWidth: 1)
         )
         .onAppear {
@@ -2497,9 +2496,9 @@ private struct MorphingAgentBubbleView: View {
             .foregroundColor(badgeColor)
             .padding(.horizontal, 9)
             .padding(.vertical, 3)
-            .background(Capsule().fill(badgeColor.opacity(0.15)))
-            .overlay(Capsule().stroke(badgeColor.opacity(0.25), lineWidth: 1))
-            .clipShape(Capsule())
+            .background(Rectangle().fill(badgeColor.opacity(0.15)))
+            .overlay(Rectangle().stroke(badgeColor.opacity(0.25), lineWidth: 1))
+            .clipShape(Rectangle())
     }
 }
 
@@ -2582,8 +2581,7 @@ private struct AgentBubbleRootView: View {
                     wrapperCollapsedSize + (wrapperExpandedHeight - wrapperCollapsedSize) * expansionProgress,
                     wrapperExpandedHeight
                 )
-                let wrapperCornerRadius = wrapperCollapsedSize / 2 + (20 - wrapperCollapsedSize / 2) * expansionProgress
-                RoundedRectangle(cornerRadius: wrapperCornerRadius, style: .continuous)
+                Rectangle()
                     .fill(Color.clear)
                     .frame(width: wrapperCurrentWidth, height: wrapperCurrentHeight)
                     .allowsHitTesting(false)

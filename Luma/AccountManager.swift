@@ -95,7 +95,7 @@ struct LumaAvatarView: View {
 
     var body: some View {
         ZStack {
-            Circle()
+            Rectangle()
                 .fill(DS.Colors.textOnAccent)
                 .frame(width: size, height: size)
             Text(initials)

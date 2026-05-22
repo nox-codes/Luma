@@ -1172,11 +1172,11 @@ private struct StyleTileView: View {
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                Rectangle()
                     .fill(Color(red: 0.08, green: 0.08, blue: 0.14))
                 previewContent
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .clipShape(Rectangle())
+                Rectangle()
                     .stroke(isSelected ? DS.Colors.accent : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)
             }
             .frame(height: 68)
@@ -1259,11 +1259,8 @@ struct BubbleAppearanceSectionView: View {
         }
         .padding(20)
         .background(LumaTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: LumaTheme.radiusMD, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: LumaTheme.radiusMD, style: .continuous)
-                .stroke(LumaTheme.border, lineWidth: 1)
-        )
+        .clipShape(Rectangle())
+        .overlay(Rectangle().stroke(LumaTheme.border, lineWidth: 1))
     }
 
     /// Sliders that are specific to the currently selected bubble style.
@@ -1434,7 +1431,7 @@ private struct BubbleSlider: View {
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundColor(LumaTheme.textSecondary)
             }
-            Slider(value: $value, in: range, step: step).tint(DS.Colors.accent)
+            RetroSlider(value: $value, range: range, step: step, tintColor: DS.Colors.accent)
             Text(detail)
                 .font(.system(size: 10))
                 .foregroundColor(LumaTheme.textPlaceholder)

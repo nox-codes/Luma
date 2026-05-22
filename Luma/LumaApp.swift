@@ -65,7 +65,7 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         }
         registerAsLoginItemIfNeeded()
         LumaUpdateManager.shared.startChecking()
-        // startSparkleUpdater()  — uncomment once GitHub Actions appcast workflow is set up
+        startSparkleUpdater()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

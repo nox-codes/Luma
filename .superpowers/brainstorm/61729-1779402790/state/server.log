@@ -1,0 +1,5 @@
+{"type":"server-started","port":55726,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:55726","screen_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/61729-1779402790/content","state_dir":"/Users/nox/Desktop/luma/.superpowers/brainstorm/61729-1779402790/state"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/61729-1779402790/content/retro-panel.html"}
+{"type":"screen-added","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/61729-1779402790/content/retro-full.html"}
+{"type":"screen-updated","file":"/Users/nox/Desktop/luma/.superpowers/brainstorm/61729-1779402790/content/retro-full.html"}
+{"type":"server-stopped","reason":"idle timeout"}

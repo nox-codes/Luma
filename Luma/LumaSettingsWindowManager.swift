@@ -91,24 +91,20 @@ final class LumaSettingsWindowManager {
         settingsWindow.isOpaque = false
         settingsWindow.backgroundColor = .clear
         settingsWindow.hasShadow = true
-        // Borderless windows are not key by default — override so TextField focus works.
-        settingsWindow.isMovableByWindowBackground = true
+        // isMovableByWindowBackground is intentionally NOT set — the SwiftUI
+        // WindowDragHandle view in the top bar handles dragging instead, so
+        // interactive controls (toggles, sliders, text fields) are never swallowed
+        // by the window-level drag recogniser.
 
         let hostingView = NSHostingView(
             rootView: SettingsPanelView()
                 .preferredColorScheme(.dark)
-                // SwiftUI-level clip so all subviews respect the rounded shape.
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: .black.opacity(0.60), radius: 36, y: 14)
         )
         hostingView.frame = NSRect(origin: .zero, size: windowSize)
         hostingView.autoresizingMask = [.width, .height]
 
-        // AppKit-level layer clip — removes the 1px OS-rendered border that appears
-        // around the NSHostingView even when the window background is clear.
         hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = 20
-        hostingView.layer?.cornerCurve = .continuous
         hostingView.layer?.masksToBounds = true
         hostingView.layer?.backgroundColor = CGColor.clear
 

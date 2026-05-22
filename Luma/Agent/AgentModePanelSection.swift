@@ -26,10 +26,9 @@ struct AgentModePanelSection: View {
         VStack(alignment: .leading, spacing: 8) {
             // Status header row
             HStack(spacing: 8) {
-                Circle()
+                Rectangle()
                     .fill(statusColor)
                     .frame(width: 7, height: 7)
-                    .shadow(color: statusColor.opacity(0.55), radius: 4)
 
                 Text("Ask Agent")
                     .font(.system(size: 12, weight: .semibold))
@@ -52,16 +51,17 @@ struct AgentModePanelSection: View {
             TextField("Ask Luma to do something...", text: $prompt, axis: .vertical)
                 .lineLimit(1...3)
                 .textFieldStyle(.plain)
+                .tint(DS.Colors.accent)
                 .font(.system(size: 12))
                 .foregroundColor(DS.Colors.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    Rectangle()
                         .fill(Color.white.opacity(0.07))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    Rectangle()
                         .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
                 )
                 .onSubmit(runPrompt)
@@ -94,11 +94,11 @@ struct AgentModePanelSection: View {
                 }
                 .buttonStyle(.plain)                .foregroundColor(isRecordingVoice ? DS.Colors.destructiveText : DS.Colors.textPrimary)
                 .background(
-                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    Rectangle()
                         .fill(isRecordingVoice ? DS.Colors.destructive.opacity(0.2) : Color.white.opacity(0.07))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    Rectangle()
                         .stroke(isRecordingVoice ? DS.Colors.destructive.opacity(0.3) : Color.white.opacity(0.08), lineWidth: 0.5)
                 )
 
@@ -111,7 +111,7 @@ struct AgentModePanelSection: View {
                 .buttonStyle(.plain)
                 .foregroundColor(DS.Colors.textOnAccent)
                 .background(
-                    RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+                    Rectangle()
                         .fill(canRun ? DS.Colors.accent : DS.Colors.accent.opacity(0.35))
                 )
                 .disabled(!canRun)
@@ -119,11 +119,11 @@ struct AgentModePanelSection: View {
         }
         .padding(9)
         .background(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.large, style: .continuous)
+            Rectangle()
                 .fill(Color.white.opacity(0.045))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.large, style: .continuous)
+            Rectangle()
                 .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
         )
     }
@@ -181,11 +181,11 @@ struct AgentModePanelSection: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .fill(Color.white.opacity(0.055))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .stroke(DS.Colors.borderSubtle.opacity(0.75), lineWidth: 0.5)
         )
     }
@@ -277,9 +277,9 @@ struct AgentModePanelSection: View {
                         }
                         .buttonStyle(.plain)
                         .background(DS.Colors.accent.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .clipShape(Rectangle())
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            Rectangle()
                                 .stroke(DS.Colors.accent.opacity(0.35), lineWidth: 1)
                         )
                     }
@@ -290,11 +290,11 @@ struct AgentModePanelSection: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .fill(Color.white.opacity(0.055))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .stroke(DS.Colors.borderSubtle.opacity(0.75), lineWidth: 0.5)
         )
     }

@@ -172,7 +172,6 @@ private struct PermissionDragPillView: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                 .resizable()
                 .frame(width: 44, height: 44)
-                .cornerRadius(10)
                 .onDrag {
                     let appURL = URL(fileURLWithPath: Bundle.main.bundlePath)
                     return NSItemProvider(object: appURL as NSURL)
@@ -194,22 +193,21 @@ private struct PermissionDragPillView: View {
             // Arrow hint
             Image(systemName: "arrow.right.circle.fill")
                 .font(.system(size: 20))
-                .foregroundColor(Color(hex: "#4caf50").opacity(0.7))
+                .foregroundColor(Color.white.opacity(0.7))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            Rectangle()
                 .fill(Color(hex: "#1A1C1A"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color(hex: "#4caf50").opacity(glowPulse ? 0.7 : 0.25), lineWidth: 1.5)
+                    Rectangle()
+                        .stroke(Color.white.opacity(glowPulse ? 0.5 : 0.15), lineWidth: 1.5)
                 )
-                .shadow(color: Color(hex: "#4caf50").opacity(glowPulse ? 0.35 : 0.1), radius: glowPulse ? 20 : 10, x: 0, y: 0)
         )
         .preferredColorScheme(.dark)
         .onAppear {
-            // Pulse the glow to draw attention
+            // Pulse the border to draw attention
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 glowPulse = true
             }

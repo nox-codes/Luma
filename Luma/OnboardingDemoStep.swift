@@ -57,14 +57,14 @@ struct OnboardingDemoStep: View {
                 if let player = videoPlayer {
                     VideoPlayer(player: player)
                         .frame(height: 260)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(Rectangle())
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            Rectangle()
                                 .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                         )
                 } else {
                     // Video file not yet added to the bundle — show a placeholder
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Rectangle()
                         .fill(Color(hex: "#1A1C1A"))
                         .frame(height: 260)
                         .overlay(
@@ -79,7 +79,7 @@ struct OnboardingDemoStep: View {
                             }
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            Rectangle()
                                 .stroke(Color(hex: "#2E322E"), lineWidth: 1)
                         )
                 }
@@ -93,12 +93,12 @@ struct OnboardingDemoStep: View {
                 Button(action: onSkipOrContinue) {
                     Text("Continue →")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(hex: "#ECEEED"))
+                        .foregroundColor(Color(hex: "#111111"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(hex: "#2563EB"))
+                            Rectangle()
+                                .fill(Color.white)
                         )
                 }
                 .buttonStyle(.plain)

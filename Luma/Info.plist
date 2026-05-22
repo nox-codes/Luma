@@ -12,12 +12,7 @@
 	<string>Luma needs screen recording access to see your screen and help you.</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/nox-codes/Luma/main/appcast.xml</string>
-	<!-- SUPublicEDKey: replace this placeholder with the public key from a fresh EdDSA keypair.
-	     Generate with Sparkle's generate_keys tool:
-	       .build/release/generate_keys
-	     Store the private key securely (GitHub secret: SPARKLE_PRIVATE_KEY).
-	     The public key goes here. Do NOT commit the private key. -->
 	<key>SUPublicEDKey</key>
-	<string>REPLACE_WITH_LUMA_PUBLIC_EDDSA_KEY</string>
+	<string>yn28URL9cV/bT6Oic6iSGY+tE/JdDLkP/ndOAze2vpw=</string>
 </dict>
 </plist>

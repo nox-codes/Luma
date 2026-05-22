@@ -293,8 +293,8 @@ final class CompanionManager: ObservableObject {
             }
         }
 
-        // Show or refocus the floating bubble when the double-tap fires.
-        // If Luma is hidden (idle auto-hide), unhide it first.
+        // Toggle the floating bubble on double-tap: open if closed, dismiss if open.
+        // If Luma is hidden (idle auto-hide) and the bubble is not visible, unhide first.
         floatingInputTriggeredObserver = NotificationCenter.default.addObserver(
             forName: .lumaFloatingInputTriggered,
             object: nil,
@@ -302,15 +302,21 @@ final class CompanionManager: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // If the floating panel is already visible, dismiss it.
+                if LumaFloatingInputWindowManager.shared.isPanelVisible {
+                    LumaFloatingInputWindowManager.shared.hide()
+                    LumaLogger.log("[FloatingInput] Dismissed by double-tap modifier")
+                    return
+                }
+                // Panel is not visible — show it, waking up the overlay if needed.
                 if !self.isOverlayVisible {
                     self.overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                     self.isOverlayVisible = true
                     self.idleTimer.start()
                 }
-                // Triggering the bubble counts as an interaction
                 self.idleTimer.reset()
                 LumaFloatingInputWindowManager.shared.showOrRefocus()
-                LumaLogger.log("[FloatingInput] Triggered by double-tap modifier")
+                LumaLogger.log("[FloatingInput] Opened by double-tap modifier")
             }
         }
 

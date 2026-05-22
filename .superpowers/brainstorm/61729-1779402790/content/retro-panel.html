@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luma Retro UI Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #111111;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: #E2E2E2;
+    padding: 48px 32px;
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-height: 100vh;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 24px; }
+
+  .scene-label {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 8px;
+  }
+
+  /* ─── MENU BAR ────────────────────────────────────────── */
+  .menubar {
+    width: 356px;
+    height: 24px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+    gap: 10px;
+  }
+
+  .menubar-luma {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: #E2E2E2;
+    margin-right: auto;
+    margin-left: 10px;
+  }
+
+  .menubar-item {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #555;
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── PANEL ───────────────────────────────────────────── */
+  .panel {
+    width: 356px;
+    background: #191919;
+    border: 1px solid #2a2a2a;
+    border-top: none;
+  }
+
+  /* ─── HEADER ─────────────────────────────────────────── */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2a;
+    background: #1e1e1e;
+  }
+
+  .header-label {
+    font-family: "SF Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #E2E2E2;
+  }
+
+  .header-status {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #444;
+    letter-spacing: 0.06em;
+    margin-left: 8px;
+  }
+
+  .status-dot {
+    width: 5px;
+    height: 5px;
+    background: #E2E2E2;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .header-pill {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: #555;
+    border: 1px solid #2a2a2a;
+    padding: 2px 6px;
+  }
+
+  .header-close {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #444;
+    border: 1px solid #2a2a2a;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  /* ─── SECTION LABEL ──────────────────────────────────── */
+  .section-label {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #444;
+    padding: 10px 14px 6px;
+  }
+
+  /* ─── UPDATE CARD ─────────────────────────────────────── */
+  .update-card {
+    margin: 10px 14px;
+    border: 1px solid #2a2a2a;
+    padding: 10px 12px;
+  }
+
+  .update-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .update-tag {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: #E2E2E2;
+    border: 1px solid #E2E2E2;
+    padding: 1px 6px;
+  }
+
+  .update-beta-tag {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: #888;
+    border: 1px solid #444;
+    padding: 1px 6px;
+  }
+
+  .update-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #E2E2E2;
+  }
+
+  .update-subtitle {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #555;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .update-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .btn-primary {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: #111;
+    background: #E2E2E2;
+    border: 1px solid #E2E2E2;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: #555;
+    background: transparent;
+    border: 1px solid #2a2a2a;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+
+  /* ─── ROW ─────────────────────────────────────────────── */
+  .panel-row {
+    display: flex;
+    align-items: center;
+    padding: 9px 14px;
+    border-bottom: 1px solid #222;
+    gap: 10px;
+  }
+
+  .panel-row:last-child { border-bottom: none; }
+
+  .row-label {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: #444;
+    text-transform: uppercase;
+    width: 72px;
+    flex-shrink: 0;
+  }
+
+  .row-value {
+    font-size: 12px;
+    color: #C8C8C8;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row-badge {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #555;
+    border: 1px solid #2a2a2a;
+    padding: 1px 6px;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+
+  /* ─── SHORTCUT HINT ────────────────────────────────────── */
+  .shortcut-row {
+    padding: 10px 14px;
+    border-bottom: 1px solid #222;
+  }
+
+  .shortcut-text {
+    font-family: "SF Mono", monospace;
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 0.04em;
+  }
+
+  .shortcut-key {
+    border: 1px solid #333;
+    padding: 1px 5px;
+    color: #888;
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+  }
+
+  /* ─── AGENT SECTION ────────────────────────────────────── */
+  .agent-section {
+    border-top: 1px solid #2a2a2a;
+    margin-top: 0;
+  }
+
+  .agent-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid #222;
+  }
+
+  .agent-label {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: #444;
+    text-transform: uppercase;
+  }
+
+  .agent-count {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #333;
+    margin-left: auto;
+    border: 1px solid #2a2a2a;
+    padding: 1px 5px;
+  }
+
+  .agent-row {
+    display: flex;
+    align-items: center;
+    padding: 7px 14px;
+    border-bottom: 1px solid #1f1f1f;
+    gap: 8px;
+  }
+
+  .agent-indicator {
+    width: 4px;
+    height: 4px;
+    background: #E2E2E2;
+    flex-shrink: 0;
+  }
+
+  .agent-name {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #888;
+    flex: 1;
+  }
+
+  .agent-status {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #444;
+    letter-spacing: 0.06em;
+  }
+
+  /* ─── BETA TOGGLE ──────────────────────────────────────── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    padding: 9px 14px;
+    border-top: 1px solid #222;
+    gap: 8px;
+  }
+
+  .toggle-label {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #444;
+    flex: 1;
+    letter-spacing: 0.04em;
+  }
+
+  .retro-toggle {
+    display: flex;
+    border: 1px solid #2a2a2a;
+    overflow: hidden;
+  }
+
+  .retro-toggle-opt {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    color: #444;
+    cursor: pointer;
+  }
+
+  .retro-toggle-opt.active {
+    background: #E2E2E2;
+    color: #111;
+  }
+
+  /* ─── BOTTOM BAR ───────────────────────────────────────── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    padding: 9px 14px;
+    border-top: 1px solid #2a2a2a;
+    background: #1e1e1e;
+    gap: 8px;
+  }
+
+  .avatar {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .avatar-text {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #555;
+  }
+
+  .username {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #555;
+  }
+
+  .bottom-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  .bottom-icon {
+    font-family: "SF Mono", monospace;
+    font-size: 11px;
+    color: #444;
+    cursor: pointer;
+  }
+
+  /* ─── FLOATING INPUT ─────────────────────────────────────── */
+  .floating-pill {
+    width: 320px;
+    background: #191919;
+    border: 1px solid #2a2a2a;
+  }
+
+  .pill-input-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    gap: 10px;
+    border-bottom: 1px solid #222;
+  }
+
+  .pill-prefix {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #333;
+    flex-shrink: 0;
+  }
+
+  .pill-field {
+    flex: 1;
+    font-size: 13px;
+    color: #888;
+    font-family: -apple-system, sans-serif;
+  }
+
+  .pill-send {
+    font-family: "SF Mono", monospace;
+    font-size: 10px;
+    color: #111;
+    background: #E2E2E2;
+    border: none;
+    padding: 4px 10px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+
+  .pill-response {
+    padding: 10px 12px;
+  }
+
+  .pill-response-label {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #333;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+
+  .pill-response-text {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.5;
+  }
+
+  /* ─── CURSOR BUBBLE ──────────────────────────────────────── */
+  .cursor-bubble {
+    width: 280px;
+    background: #191919;
+    border: 1px solid #2a2a2a;
+  }
+
+  .cursor-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #222;
+  }
+
+  .cursor-dot {
+    width: 6px;
+    height: 6px;
+    background: #E2E2E2;
+  }
+
+  .cursor-title {
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    color: #555;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .cursor-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #C8C8C8;
+    line-height: 1.6;
+  }
+
+  .cursor-waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 12px;
+    border-top: 1px solid #222;
+  }
+
+  .wave-bar {
+    width: 3px;
+    background: #333;
+  }
+
+  .divider-line {
+    height: 1px;
+    background: #2a2a2a;
+    margin: 0 14px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── COLUMN 1: Main companion panel ─────────────────────── -->
+<div class="col">
+  <div>
+    <p class="scene-label">Companion panel — menu bar dropdown</p>
+    <div class="menubar">
+      <span class="menubar-luma">LUMA</span>
+      <span class="menubar-item">v0.5.2</span>
+      <span class="menubar-item">●</span>
+    </div>
+    <div class="panel">
+      <!-- Header -->
+      <div class="panel-header">
+        <div class="status-dot"></div>
+        <span class="header-label" style="margin-left:8px">LUMA</span>
+        <span class="header-status">· IDLE</span>
+        <div class="header-right">
+          <span class="header-pill">READY</span>
+          <span class="header-close">✕</span>
+        </div>
+      </div>
+
+      <!-- Update card -->
+      <div style="padding: 10px 14px 0">
+        <div class="update-card">
+          <div class="update-header">
+            <span class="update-tag">v0.6.0</span>
+            <span class="update-beta-tag">BETA</span>
+            <span class="update-title" style="margin-left:2px">Update available</span>
+          </div>
+          <div class="update-subtitle">v0.6.0 — Floating Input, Retro UI, Auto-Update (May 2026)</div>
+          <div class="update-actions">
+            <button class="btn-primary">↓ DOWNLOAD</button>
+            <button class="btn-secondary">DISMISS</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shortcut hint -->
+      <div class="shortcut-row" style="margin-top:8px">
+        <span class="shortcut-text">Hold <span class="shortcut-key">⌃</span> <span class="shortcut-key">⌥</span> to talk.</span>
+      </div>
+
+      <!-- Model row -->
+      <div class="panel-row">
+        <span class="row-label">MODEL</span>
+        <span class="row-value">google/gemini-2.5-flash</span>
+        <span class="row-badge">GOOGLE</span>
+      </div>
+
+      <!-- STT row -->
+      <div class="panel-row">
+        <span class="row-label">VOICE</span>
+        <span class="row-value">AssemblyAI Streaming</span>
+        <span class="row-badge">LIVE</span>
+      </div>
+
+      <!-- Agent section -->
+      <div class="agent-section">
+        <div class="agent-header">
+          <span class="agent-label">AGENTS</span>
+          <span class="agent-count">2 ACTIVE</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-indicator"></div>
+          <span class="agent-name">research-task-01</span>
+          <span class="agent-status">WORKING</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-indicator" style="background:#444"></div>
+          <span class="agent-name">code-review-02</span>
+          <span class="agent-status">IDLE</span>
+        </div>
+      </div>
+
+      <!-- Beta toggle -->
+      <div class="toggle-row">
+        <span class="toggle-label">BETA UPDATES</span>
+        <div class="retro-toggle">
+          <div class="retro-toggle-opt active">ON</div>
+          <div class="retro-toggle-opt">OFF</div>
+        </div>
+      </div>
+
+      <!-- Bottom bar -->
+      <div class="bottom-bar">
+        <div class="avatar"><span class="avatar-text">N</span></div>
+        <span class="username">nox</span>
+        <div class="bottom-actions">
+          <span class="bottom-icon">⚙</span>
+          <span class="bottom-icon">⏻</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── COLUMN 2: Floating input + cursor bubble ────────────── -->
+<div class="col" style="padding-top: 64px">
+
+  <!-- Floating input -->
+  <div>
+    <p class="scene-label">Floating text input — ⌘⌘ or ^^</p>
+    <div class="floating-pill">
+      <div class="pill-input-row">
+        <span class="pill-prefix">></span>
+        <span class="pill-field">Ask Luma anything…</span>
+        <button class="pill-send">SEND</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating input with response -->
+  <div>
+    <p class="scene-label">Floating input — with response</p>
+    <div class="floating-pill">
+      <div class="pill-input-row">
+        <span class="pill-prefix">></span>
+        <span class="pill-field">how do I center a div</span>
+        <button class="pill-send">SEND</button>
+      </div>
+      <div class="pill-response">
+        <div class="pill-response-label">LUMA · RESPONSE</div>
+        <div class="pill-response-text">Use <code style="font-family:SF Mono,monospace;font-size:11px;border:1px solid #2a2a2a;padding:1px 4px;color:#aaa">display: flex; align-items: center; justify-content: center</code> on the parent container.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cursor overlay bubble -->
+  <div>
+    <p class="scene-label">Cursor overlay response bubble</p>
+    <div class="cursor-bubble">
+      <div class="cursor-header">
+        <div class="cursor-dot"></div>
+        <span class="cursor-title">LUMA · RESPONDING</span>
+      </div>
+      <div class="cursor-body">
+        Click the <strong>Settings</strong> icon in the top-right corner of the window, then navigate to <strong>Privacy &amp; Security</strong>.
+      </div>
+      <div class="cursor-waveform">
+        <div class="wave-bar" style="height:6px"></div>
+        <div class="wave-bar" style="height:12px"></div>
+        <div class="wave-bar" style="height:8px"></div>
+        <div class="wave-bar" style="height:16px"></div>
+        <div class="wave-bar" style="height:10px"></div>
+        <div class="wave-bar" style="height:14px"></div>
+        <div class="wave-bar" style="height:6px"></div>
+        <div class="wave-bar" style="height:9px"></div>
+        <div class="wave-bar" style="height:12px"></div>
+        <span style="font-family:'SF Mono',monospace;font-size:9px;color:#333;margin-left:6px;letter-spacing:0.06em">SPEAKING</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

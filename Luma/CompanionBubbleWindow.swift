@@ -99,9 +99,6 @@ struct BubbleContentView: View {
     /// to trigger the spring scale + opacity transition.
     @State private var isAppearing: Bool = false
 
-    /// Hue rotation angle for the animated gradient border (PRD 7.4: 8s loop).
-    @State private var gradientHueRotation: Double = 0
-
     // MARK: - Body
 
     var body: some View {
@@ -124,38 +121,19 @@ struct BubbleContentView: View {
         }
         .background(
             ZStack {
-                // Backdrop blur layer (PRD 7.4)
+                // Backdrop blur layer
                 VisualEffectBlurView()
-                    .clipShape(RoundedRectangle(cornerRadius: bubbleCornerRadius))
-
-                // Dark overlay: rgba(10, 10, 15, 0.85) per PRD 7.4
+                // Dark overlay: rgba(10, 10, 15, 0.85)
                 Color(red: 10/255, green: 10/255, blue: 15/255)
                     .opacity(0.85)
-                    .clipShape(RoundedRectangle(cornerRadius: bubbleCornerRadius))
             }
         )
-        // Animated gradient border that cycles through hues (PRD 7.4: 8s loop)
         .overlay(
-            RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [
-                            Color(hex: "#0A84FF"),
-                            Color(hex: "#BF5AF2"),
-                            Color(hex: "#FF375F"),
-                            Color(hex: "#FF9F0A"),
-                            Color(hex: "#30D158"),
-                            Color(hex: "#0A84FF"),
-                        ]),
-                        center: .center
-                    ),
-                    lineWidth: gradientBorderLineWidth
-                )
-                .hueRotation(.degrees(gradientHueRotation))
-                .opacity(0.6)
+            Rectangle()
+                .stroke(Color.white.opacity(0.2), lineWidth: gradientBorderLineWidth)
         )
         .shadow(color: .black.opacity(0.4), radius: 12)
-        // Spring animation on size changes for smooth resize (PRD 7.4)
+        // Spring animation on size changes for smooth resize
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: contentState.bubbleText)
         // Scale and opacity spring entrance animation
         .scaleEffect(isAppearing ? 1.0 : 0.85)
@@ -166,10 +144,6 @@ struct BubbleContentView: View {
         )
         .onAppear {
             isAppearing = true
-            // Start the continuous hue rotation (8s full cycle per PRD 7.4)
-            withAnimation(.linear(duration: 8.0).repeatForever(autoreverses: false)) {
-                gradientHueRotation = 360
-            }
         }
     }
 
@@ -203,7 +177,7 @@ struct BubbleContentView: View {
     private var walkthroughStepIndicators: some View {
         HStack(spacing: 5) {
             ForEach(0..<contentState.walkthroughTotalSteps, id: \.self) { stepIndex in
-                Circle()
+                Rectangle()
                     .fill(stepIndex <= contentState.walkthroughCurrentStep
                           ? LumaAccentTheme.current.cursorColor
                           : DS.Colors.textPrimary.opacity(0.2))

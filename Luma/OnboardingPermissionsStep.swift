@@ -80,12 +80,12 @@ struct OnboardingPermissionsStep: View {
                 Button(action: { if allGranted { onAllPermissionsGranted() } }) {
                     Text("Continue →")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(allGranted ? Color(hex: "#ECEEED") : Color(hex: "#444"))
+                        .foregroundColor(allGranted ? Color(hex: "#111111") : Color(hex: "#444"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(allGranted ? Color(hex: "#2563EB") : Color(hex: "#1A1C1A"))
+                            Rectangle()
+                                .fill(allGranted ? Color.white : Color(hex: "#1A1C1A"))
                         )
                 }
                 .buttonStyle(.plain)
@@ -130,7 +130,7 @@ struct OnboardingPermissionsStep: View {
                 .foregroundColor(isGranted ? Color(hex: "#34D399") : Color(hex: "#9BA39D"))
                 .frame(width: 36, height: 36)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    Rectangle()
                         .fill(isGranted ? Color(hex: "#1A2F1A") : Color(hex: "#1A1C1A"))
                 )
 
@@ -154,9 +154,9 @@ struct OnboardingPermissionsStep: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(
-                        Capsule()
+                        Rectangle()
                             .fill(Color(hex: "#1A2F1A"))
-                            .overlay(Capsule().stroke(Color(hex: "#2A5A2A"), lineWidth: 1))
+                            .overlay(Rectangle().stroke(Color(hex: "#2A5A2A"), lineWidth: 1))
                     )
             } else {
                 Button("Give") {
@@ -164,12 +164,12 @@ struct OnboardingPermissionsStep: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color(hex: "#ECEEED"))
+                .foregroundColor(Color(hex: "#111111"))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(hex: "#2563EB"))
+                    Rectangle()
+                        .fill(Color.white)
                 )
                 .onHover { isHovering in
                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -178,10 +178,10 @@ struct OnboardingPermissionsStep: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            Rectangle()
                 .fill(Color(hex: "#1A1C1A"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Rectangle()
                         .stroke(
                             isGranted ? Color(hex: "#2A5A2A") : Color(hex: "#2E322E"),
                             lineWidth: 1

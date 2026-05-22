@@ -16,6 +16,7 @@
 //  UserDefaults but dormant until we're ready to filter.
 //
 
+import Combine
 import Foundation
 
 // MARK: - Data model

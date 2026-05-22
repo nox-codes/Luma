@@ -1,0 +1,145 @@
+# Luma — Changelog
+
+---
+
+## Origins: Clicky by Farza
+
+*The open-source macOS menu bar companion that Luma was forked from.*
+
+Luma began as **Clicky**, an open-source macOS menu bar companion app built by Farza. Clicky established the core idea: a status bar icon that opens a floating panel, push-to-talk voice input, a Cloudflare Worker proxy routing requests to Claude, and a blue cursor overlay that could point at UI elements on screen. API keys were routed through the proxy rather than stored locally, and the app shipped with a basic onboarding flow and accessibility-based element detection.
+
+---
+
+## Luma v1 — The Rebrand and Rebuild
+
+*Clicky becomes Luma — Keychain-native API keys, a new design system, onboarding, accounts, and local TTS.*
+
+**Nox forked Clicky and bootstrapped Luma**, rewriting the app from the ground up under a new identity while preserving the core premise.
+
+Key changes from Clicky:
+
+- Full rebrand across all Swift source files, assets, and config — Clicky became Luma
+- Removed the Cloudflare Worker proxy entirely; API keys now live in the macOS Keychain via a new `KeychainManager`
+- Replaced the design system with `LumaTheme` — a unified token system for colors, spacing, corner radii, and typography
+- Added a 5-step onboarding wizard to guide new users through permissions and key setup
+- Added a multi-profile system (`ProfileManager`) supporting different API providers per profile
+- Added `AccountManager` with local user accounts, display names, and avatar initials
+- Added PIN protection (`PINManager`) with a custom numeric keypad view
+- Rebuilt the settings panel with four tabs covering account, provider, voice, and permissions
+- Replaced ElevenLabs TTS with macOS-native `AVSpeechSynthesizer` — fully local, no API calls
+- Ported AssemblyAI token fetching directly to the Keychain key, removing the proxy dependency
+- Added a `WalkthroughEngine` with step-by-step guided task execution using AX + cursor pointing
+- Added `PostOnboardingTutorialManager` — a 5-step first-run walkthrough that highlights panel UI elements with a pulse ring
+
+---
+
+## Luma v2 — Smarter Vision, On-Device ML, and Intent Routing
+
+*On-device MobileNetV2 element detection, an intent classifier that routes every voice command, and OpenRouter model switching.*
+
+With the foundation solid, the focus shifted to making Luma genuinely useful as a screen-aware assistant.
+
+- Introduced a **3-layer visual detection pipeline**: Layer 1 uses `VNRecognizeTextRequest` + `VNDetectRectanglesRequest` for real bounding boxes; Layer 2 validates coordinates via MobileNetV2 crop confidence; Layer 3 falls back to Claude Vision API for elements that on-device inference misses
+- Added `LumaImageProcessingEngine` as the central element-finding authority, running AX and visual scans in parallel and cross-validating results
+- Added `LumaMobileNetDetector` and `LumaOnDeviceAI` — on-device ML inference (MobileNetV2) fully integrated into the element detection flow
+- Added `LumaIntentClassifier` — every voice input now routes through a lightweight Claude call with AX screen context before any action is taken; paths: `cli` (shell command), `visual_agent`, `guide`, `response`
+- Added `LumaCLIExecutor` for running shell commands from voice input
+- Switched to **OpenRouter** as the model layer, enabling any compatible model with a searchable model picker (free/paid sections, recommended badges)
+- AssemblyAI streaming (`u3-rt-pro`) added as the primary STT provider with a pluggable `BuddyTranscriptionProvider` layer; Apple Speech remains the local fallback
+- Added file-based logging via `LumaLogger` with auto-rotation at 2 MB and a live log viewer window (`LumaLogWindowManager`)
+- Added PostHog analytics via `LumaAnalytics`
+- Improved multi-monitor coordinate mapping and bezier arc cursor animations
+- Improved push-to-talk reliability with a listen-only `CGEvent` tap for system-wide modifier shortcuts
+
+---
+
+## Luma v3 — Agent System and Floating Bubble UI
+
+*Multi-agent sessions with dual Claude/CLI runtimes, floating physics-driven orbs that expand into rich response cards.*
+
+The largest update to date, v3 introduced a full multi-agent architecture and a completely new floating UI layer.
+
+**Agent System**
+
+- Dual-runtime architecture: `ClaudeCodeAgentRuntime` (default) spawns the `claude` CLI subprocess with `--output-format stream-json`; `ClaudeAPIAgentRuntime` (fallback) runs a tool-use loop via OpenRouter with 7 built-in tools
+- `AgentRuntimeManager` auto-detects Claude Code CLI and selects the appropriate runtime
+- Each `AgentSession` owns its own transcript, accent theme, status, and response card; managed by `CompanionManager`
+- Sessions auto-generate titles via a lightweight API call and summarize themselves on completion for cost-efficient follow-up prompts
+- `LumaMemoryManager` persists memory and per-agent history to `~/Library/Application Support/Luma/`
+- Voice command detection for agent spawning via regex in `AgentVoiceIntegration`
+- Hotkeys: Ctrl+Cmd+N to spawn, Ctrl+Option+Tab to cycle, Ctrl+Option+1-9 to switch
+
+**Floating Bubble Dock**
+
+- One `NSPanel` per active agent session, driven by a 25 Hz physics timer with idle drift (Lissajous path), working pulse, and proximity offsets
+- Orbs morph in-place into expanded cards on hover — no position drift, anchored to tracked corner
+- Expanded cards show a short headline summary and full `RichMarkdownView` (tables, code blocks, Mermaid diagrams, bullet lists, blockquotes)
+- Adaptive card height measured via a hidden sizer, springs from 155pt to 520pt max
+- Glassy orb visuals with radial gradient, specular highlight, and pulsing status dot
+
+**UI and Design**
+
+- Redesigned companion bubble: backdrop blur, angular gradient animated border (8s hue cycle), `AttributedString` markdown rendering, smooth spring resize, scroll for overflow, and walkthrough step indicators
+- Rebuilt settings with `DS` design tokens and agent runtime controls
+- Inline `AgentModePanelSection` in the companion panel for quick agent access
+- Transient cursor mode: when the cursor overlay is hidden, it fades in for the duration of each interaction and fades out automatically
+
+---
+
+## Luma v0.5.1 — Reliability and Silent Failure Fixes
+
+*Fixed silent failures in Release builds — empty API responses, Keychain denials, and cancelled requests now surface properly.*
+
+Targeted reliability pass to surface bugs that were swallowed silently in Release builds.
+
+- Throw on empty SSE stream (200 OK, no text chunks) instead of returning to idle silently — the primary cause of the "no API response" issue in Release builds
+- Check `Task.isCancelled` after acquiring the rate-limit slot so cancelled requests don't make a real network call and waste the 15-second cooldown
+- Log Keychain vault load failures in `VaultManager` so Debug-vs-Release code-signing denials are visible in `luma.log` instead of failing silently
+- Log API key found/not-found in `ProfileManager` (key length only, no value)
+
+---
+
+## Luma v0.5.2 (Beta) — Floating Text Input, Onboarding Overhaul, and Idle Auto-Hide
+
+*Text input floats as its own window, onboarding rebuilt from scratch, cursor overlay now fades when idle.*
+
+- **Floating text input**: Text field in the companion panel now floats above the panel as a separate `NSPanel` so it stays accessible while interacting with other apps
+- **Onboarding overhaul**: Rebuilt the 5-step onboarding wizard with cleaner layout, better permission explanations, and a skip path for users who already have keys configured
+- **Idle auto-hide**: Cursor overlay now fades out automatically after 1 second of inactivity (no active recording, processing, or TTS) to reduce visual noise during normal use
+- **Agent bubble improvements**: Improved physics idle drift, smoother expand/collapse spring animations, better card height measurement for long responses
+- Bug fix: Push-to-talk shortcut monitor now recovers if the CGEvent tap is revoked by the system without a crash
+
+---
+
+## Luma v0.5.3 — In-App Update Detection
+
+*Luma now checks GitHub Releases on launch and shows a dismissible update card in the panel when a new version is out.*
+
+Luma can now detect when a new version is available and surface it directly in the companion panel, without requiring Sparkle or any app store infrastructure.
+
+**Update detection**
+
+- `LumaUpdateManager` polls the GitHub Releases API (`api.github.com/repos/nox-codes/Luma/releases/latest`) 5 seconds after launch and every 24 hours for long-running sessions
+- Compares the release `tag_name` against `CFBundleShortVersionString` using semantic versioning (major.minor.patch integer comparison, leading `v` stripped)
+- Dismissed versions are stored in `UserDefaults` so the card does not reappear after the user dismisses it
+- Beta detection: a release is flagged as beta if the GitHub API `prerelease` field is `true` OR the release name contains `"(Beta)"` — betas are always shown to all users
+
+**Update card**
+
+- When an update is available, a card appears at the top of the companion panel showing the version number, a BETA badge when applicable, and the first line of the release notes as a subtitle
+- Download button opens the release `.dmg` asset directly; falls back to the GitHub release page if no asset is attached
+- Dismiss button hides the card and suppresses that version permanently
+
+**Dormant Sparkle infrastructure**
+
+- `appcast.xml` added to the repository with a template for EdDSA-signed release entries
+- `Info.plist` wired with `SUFeedURL` pointing to the raw appcast and a placeholder `SUPublicEDKey`
+- `startSparkleUpdater()` stub ready in `LumaApp.swift` — activate by uncommenting once GitHub Actions signing is set up
+
+**Bug fix**
+
+- Menu bar panel popup fixed: `showPanel()` now guards against double-showing (was resetting `alphaValue = 0` causing a flash), and the click-outside-to-dismiss monitor now filters status item clicks by checking whether the click landed in the menu bar area rather than relying on a timestamp race
+
+---
+
+*Built by Nox. Originally forked from Clicky by Farza.*

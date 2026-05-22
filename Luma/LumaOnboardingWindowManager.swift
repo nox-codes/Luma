@@ -126,16 +126,12 @@ final class LumaOnboardingWindowManager {
                 companionManager: companionManagerForWindow
             )
             .preferredColorScheme(.dark)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: .black.opacity(0.60), radius: 36, y: 14)
         )
         hostingView.frame = NSRect(origin: .zero, size: windowSize)
         hostingView.autoresizingMask = [NSView.AutoresizingMask.width, NSView.AutoresizingMask.height]
 
-        // AppKit layer clip — removes the 1px OS border that appears on NSHostingView.
         hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = 20
-        hostingView.layer?.cornerCurve = CALayerCornerCurve.continuous
         hostingView.layer?.masksToBounds = true
         hostingView.layer?.backgroundColor = CGColor.clear
 

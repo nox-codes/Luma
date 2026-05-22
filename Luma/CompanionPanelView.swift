@@ -23,7 +23,7 @@ struct CompanionPanelView: View {
     // Observing this key causes the panel to re-render when the accent theme changes,
     // so DS.Colors.accent / DS.Colors.accentText (which read LumaAccentTheme.current)
     // immediately reflect the new color across all panel UI.
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
     /// Dormant beta-update preference. Stored here so the toggle has a direct binding.
     /// LumaUpdateManager reads the same UserDefaults key when filtering becomes active.
     @AppStorage("luma_include_beta_updates") private var includeBetaUpdates: Bool = true
@@ -203,11 +203,10 @@ struct CompanionPanelView: View {
 
     private var panelHeader: some View {
         HStack(spacing: 8) {
-            // Status dot — 8pt circle with glow. Pulses when Luma is actively working.
-            Circle()
+            // Status dot — 8pt square. Pulses when Luma is actively working.
+            Rectangle()
                 .fill(statusDotColor)
                 .frame(width: 8, height: 8)
-                .shadow(color: statusDotColor.opacity(0.5), radius: 5)
                 .scaleEffect(statusDotPulseScale)
                 .opacity(statusDotPulseOpacity)
                 .onChange(of: statusDotShouldPulse) { shouldPulse in
@@ -230,15 +229,16 @@ struct CompanionPanelView: View {
 
             Spacer()
 
-            // Status displayed as a pill badge — surface3 background, tertiary text, 10pt font
-            Text(statusText)
-                .font(.system(size: 10, weight: .medium))
+            // Status badge — surface3 background, tertiary text, monospace uppercase
+            Text(statusText.uppercased())
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundColor(DS.Colors.textTertiary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(DS.Colors.surface3))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Rectangle().fill(DS.Colors.surface3))
+                .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
 
-            // Dismiss button — 24pt circle with surface3 fill
+            // Dismiss button — 24pt square
             Button(action: {
                 NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
             }) {
@@ -247,7 +247,7 @@ struct CompanionPanelView: View {
                     .foregroundColor(DS.Colors.textTertiary)
                     .frame(width: 24, height: 24)
                     .background(
-                        Circle()
+                        Rectangle()
                             .fill(DS.Colors.surface3)
                     )
             }
@@ -308,11 +308,11 @@ struct CompanionPanelView: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            Rectangle()
                 .fill(Color(red: 0.25, green: 0.1, blue: 0.05))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color(red: 1.0, green: 0.6, blue: 0.4).opacity(0.3), lineWidth: 1)
+                    Rectangle()
+                        .stroke(Color(red: 1.0, green: 0.6, blue: 0.4).opacity(0.3), lineWidth: 1)
                 )
         )
     }
@@ -340,7 +340,8 @@ struct CompanionPanelView: View {
                             .foregroundColor(DS.Colors.accentText)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Capsule().fill(DS.Colors.accentSubtle))
+                            .background(Rectangle().fill(DS.Colors.accentSubtle))
+                            .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
 
                         // Beta badge — only shown for pre-release builds
                         if update.isBeta {
@@ -349,7 +350,8 @@ struct CompanionPanelView: View {
                                 .foregroundColor(Color.orange)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(Capsule().fill(Color.orange.opacity(0.15)))
+                                .background(Rectangle().fill(Color.orange.opacity(0.15)))
+                                .overlay(Rectangle().stroke(Color.orange.opacity(0.3), lineWidth: 1))
                         }
                     }
 
@@ -373,11 +375,11 @@ struct CompanionPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(DS.Colors.textOnAccent)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 5)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    Rectangle()
                         .fill(DS.Colors.accent)
                 )
                 .onHover { isHovering in
@@ -397,11 +399,11 @@ struct CompanionPanelView: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            Rectangle()
                 .fill(Color(red: 0.05, green: 0.10, blue: 0.18))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color(red: 0.12, green: 0.22, blue: 0.38), lineWidth: 1)
+                    Rectangle()
+                        .stroke(Color(red: 0.12, green: 0.22, blue: 0.38), lineWidth: 1)
                 )
         )
     }
@@ -426,10 +428,8 @@ struct CompanionPanelView: View {
             Spacer()
 
             Toggle("", isOn: $includeBetaUpdates)
-                .toggleStyle(.switch)
+                .toggleStyle(RetroToggleStyle())
                 .labelsHidden()
-                .scaleEffect(0.75)
-                .frame(width: 38)
                 // Dormant: toggling this stores the preference but has no runtime effect yet.
                 .help("Include beta releases when checking for updates (coming soon)")
         }
@@ -445,6 +445,7 @@ struct CompanionPanelView: View {
         HStack(spacing: 8) {
             TextField("Type a message…", text: $textInputFallbackDraft)
                 .textFieldStyle(.plain)
+                .tint(DS.Colors.accent)
                 .font(.system(size: 13))
                 .foregroundColor(DS.Colors.textPrimary)
                 .padding(.horizontal, 10)
@@ -516,7 +517,7 @@ struct CompanionPanelView: View {
                 // Progress dots
                 HStack(spacing: 6) {
                     ForEach(0..<tutorial.steps.count, id: \.self) { dotIndex in
-                        Circle()
+                        Rectangle()
                             .fill(dotIndex <= tutorial.currentStepIndex
                                   ? DS.Colors.accent
                                   : DS.Colors.borderSubtle)
@@ -759,6 +760,7 @@ struct CompanionPanelView: View {
                 VStack(spacing: 8) {
                     TextField("Enter your email", text: $emailInput)
                         .textFieldStyle(.plain)
+                        .tint(DS.Colors.accent)
                         .font(.system(size: 13))
                         .foregroundColor(DS.Colors.textPrimary)
                         .padding(.horizontal, DS.Spacing.md)
@@ -829,10 +831,8 @@ struct CompanionPanelView: View {
                 get: { companionManager.isLumaCursorEnabled },
                 set: { companionManager.setLumaCursorEnabled($0) }
             ))
-            .toggleStyle(.switch)
+            .toggleStyle(RetroToggleStyle())
             .labelsHidden()
-            .tint(DS.Colors.accent)
-            .scaleEffect(0.8)
         }
         .padding(.vertical, 4)
     }
@@ -883,20 +883,21 @@ struct CompanionPanelView: View {
 
                 // Provider pill — accentSubtle background, accentText color
                 Text(providerName)
-                    .font(.system(size: 10))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundColor(DS.Colors.accentText)
-                    .padding(.horizontal, 7)
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(DS.Colors.accentSubtle))
+                    .background(Rectangle().fill(DS.Colors.accentSubtle))
+                    .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                Rectangle()
                     .fill(DS.Colors.surface1)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                Rectangle()
                     .stroke(DS.Colors.borderSubtle, lineWidth: 1)
             )
         }
@@ -946,7 +947,7 @@ struct CompanionPanelView: View {
                     .lineLimit(1)
             } else {
                 // Placeholder avatar when no account exists yet (pre-onboarding)
-                Circle()
+                Rectangle()
                     .fill(DS.Colors.textPrimary.opacity(0.15))
                     .frame(width: 28, height: 28)
             }
@@ -999,12 +1000,11 @@ struct CompanionPanelView: View {
 
     private var panelBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            Rectangle()
                 .fill(DS.Colors.background)
 
-            // Subtle noise texture overlay for visual depth (PRD 7.3)
+            // Subtle noise texture overlay for visual depth
             NoiseTextureView(opacity: 0.03)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
     }

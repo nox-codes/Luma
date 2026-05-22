@@ -124,7 +124,7 @@ final class LumaAgentHUDWindowManager {
 
 private struct LumaHUDView: View {
     @ObservedObject var companionManager: CompanionManager
-    @AppStorage(LumaAccentTheme.userDefaultsKey) private var selectedAccentThemeID = LumaAccentTheme.blue.rawValue
+    @AppStorage(LumaAccentTheme.userDefaultsKey) private var selectedAccentThemeID = LumaAccentTheme.white.rawValue
     var openMemory: () -> Void
     var prepareVoiceFollowUp: () -> Void
     var close: () -> Void
@@ -161,12 +161,12 @@ private struct LumaHUDView: View {
             maxHeight: .infinity
         )
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            Rectangle()
                 .fill(Color(red: 0.067, green: 0.075, blue: 0.071).opacity(0.98))
                 .shadow(color: .black.opacity(0.34), radius: 22, y: 14)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            Rectangle()
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
         .animation(.none, value: selectedAccentThemeID)
@@ -180,7 +180,7 @@ private struct LumaHUDView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(DS.Colors.accentText)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(DS.Colors.accentText.opacity(0.12)))
+                .background(Rectangle().fill(DS.Colors.accentText.opacity(0.12)))
 
             Text("Luma")
                 .font(.system(size: 13, weight: .heavy))
@@ -218,9 +218,9 @@ private struct LumaHUDView: View {
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundColor(DS.Colors.textSecondary)
                         .frame(width: 30, height: 30)
-                        .background(Circle().fill(Color.white.opacity(0.07)))
+                        .background(Rectangle().fill(Color.white.opacity(0.07)))
                         .overlay(
-                            Circle()
+                            Rectangle()
                                 .stroke(DS.Colors.borderSubtle.opacity(0.8), lineWidth: 1)
                         )
                 }
@@ -270,9 +270,9 @@ private struct LumaHUDView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.045)))
+        .background(Rectangle().fill(Color.white.opacity(0.045)))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            Rectangle()
                 .stroke(DS.Colors.borderSubtle.opacity(0.75), lineWidth: 0.5)
         )
     }
@@ -291,11 +291,11 @@ private struct LumaHUDView: View {
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            Rectangle()
                 .fill(transcriptRoleBackground(for: entry.role))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            Rectangle()
                 .stroke(Color.white.opacity(0.055), lineWidth: 0.5)
         )
     }
@@ -307,13 +307,14 @@ private struct LumaHUDView: View {
             TextField("Ask Agent HUD...", text: $prompt, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
+                .tint(DS.Colors.accent)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(DS.Colors.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.07)))
+                .background(Rectangle().fill(Color.white.opacity(0.07)))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    Rectangle()
                         .stroke(DS.Colors.borderSubtle.opacity(0.75), lineWidth: 0.5)
                 )
                 .onSubmit(sendPrompt)
@@ -353,7 +354,7 @@ private struct LumaHUDView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(DS.Colors.accent.opacity(0.12))
-                        .clipShape(Capsule())                    }
+                        .clipShape(Rectangle())                    }
 
                     Spacer()
 
@@ -381,11 +382,11 @@ private struct LumaHUDView: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .fill(Color.white.opacity(0.055))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
+            Rectangle()
                 .stroke(DS.Colors.borderSubtle.opacity(0.75), lineWidth: 0.5)
         )
     }
@@ -459,18 +460,12 @@ private struct HUDFloatingAgentButton: View {
     var body: some View {
         Button(action: select) {
             ZStack(alignment: .topTrailing) {
-                Circle()
+                Rectangle()
                     .fill(backgroundColor)
                     .frame(width: 30, height: 30)
                     .overlay(
-                        Circle()
+                        Rectangle()
                             .stroke(borderColor, lineWidth: isSelected ? 1.4 : 0.8)
-                    )
-                    .shadow(
-                        color: session.accentTheme.cursorColor.opacity(isSelected ? 0.34 : 0.10),
-                        radius: isSelected ? 7 : 3,
-                        x: 0,
-                        y: 0
                     )
 
                 Image(systemName: "cursorarrow")
@@ -479,10 +474,10 @@ private struct HUDFloatingAgentButton: View {
                     .rotationEffect(.degrees(-18))
                     .offset(x: -1, y: 1)
 
-                Circle()
+                Rectangle()
                     .fill(statusColor)
                     .frame(width: 7, height: 7)
-                    .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
+                    .overlay(Rectangle().stroke(Color.black.opacity(0.55), lineWidth: 1))
                     .offset(x: 1, y: -1)
             }
             .frame(width: 34, height: 34)
@@ -543,11 +538,11 @@ private struct HUDRunButton: View {
             .foregroundColor(canSend ? DS.Colors.textOnAccent : DS.Colors.disabledText)
             .frame(width: 76, height: 32)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                Rectangle()
                     .fill(backgroundColor)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                Rectangle()
                     .stroke(borderColor, lineWidth: 1)
             )
             .scaleEffect(isHovered && canSend ? 1.015 : 1)

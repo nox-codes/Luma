@@ -89,13 +89,13 @@ final class LumaFlowEngine {
         // Emit plan as a plan-role transcript entry so it's visible in the bubble
         let planLines = plan.steps.enumerated().map { i, label in "\(i + 1). \(label)" }
         var planText = planLines.joined(separator: "\n")
-        planText += "\n\n⏱ \(plan.estimatedDuration)"
-        if !plan.requiresApps.isEmpty { planText += "\n📱 Requires: \(plan.requiresApps.joined(separator: ", "))" }
+        planText += "\n\nDuration: \(plan.estimatedDuration)"
+        if !plan.requiresApps.isEmpty { planText += "\nRequires: \(plan.requiresApps.joined(separator: ", "))" }
         runtime.publishEntry(AgentTranscriptEntry(role: .plan, text: planText))
 
         // Surface warnings
         if !plan.warnings.isEmpty {
-            runtime.publishEntry(AgentTranscriptEntry(role: .system, text: "⚠️ " + plan.warnings.joined(separator: " · ")))
+            runtime.publishEntry(AgentTranscriptEntry(role: .system, text: "Warning: " + plan.warnings.joined(separator: " · ")))
         }
 
         // --- Phase 2: Execution Loop ---
@@ -111,7 +111,7 @@ final class LumaFlowEngine {
             let totalCount = context.roughPlan.count
             runtime.publishEntry(AgentTranscriptEntry(
                 role: .assistant,
-                text: "✅ Done! Completed \(completedCount) of \(totalCount) steps.\n\nGoal: \(goal)"
+                text: "Done! Completed \(completedCount) of \(totalCount) steps.\n\nGoal: \(goal)"
             ))
             runtime.publishStatus(sessionId: session.id, status: .ready)
         }
@@ -177,7 +177,7 @@ final class LumaFlowEngine {
                 context.roughPlan[index].resultObservation = observation
                 context.completedStepLabels.append(step.label)
                 context.lastObservation = observation
-                runtime.publishEntry(AgentTranscriptEntry(role: .assistant, text: "✓ \(step.label)\n\(observation)"))
+                runtime.publishEntry(AgentTranscriptEntry(role: .assistant, text: "\(step.label)\n\(observation)"))
                 LumaLogger.log("[LumaFlow] ✓ Step complete: \(step.label)")
 
             case .failed(let reason):
@@ -190,14 +190,14 @@ final class LumaFlowEngine {
             case .aborted(let reason):
                 context.roughPlan[index].state = .failed(reason)
                 context.lastObservation = "Aborted: \(reason)"
-                runtime.publishEntry(AgentTranscriptEntry(role: .system, text: "🛑 Aborted: \(reason)"))
+                runtime.publishEntry(AgentTranscriptEntry(role: .system, text: "Aborted: \(reason)"))
                 LumaLogger.log("[LumaFlow] 🛑 Aborted: \(reason)")
                 context.cancelRequested = true
                 return
 
             case .waitingForUser(let question):
                 context.roughPlan[index].state = .inProgress
-                runtime.publishEntry(AgentTranscriptEntry(role: .assistant, text: "❓ \(question)\n\nType your reply in the input field below."))
+                runtime.publishEntry(AgentTranscriptEntry(role: .assistant, text: "\(question)\n\nType your reply in the input field below."))
                 LumaLogger.log("[LumaFlow] Asking user: \(question)")
                 // Wait up to 120s for user follow-up via the runtime's followUpSubject
                 let userReply = await waitForUserReply(runtime: runtime, timeoutSeconds: 120)

@@ -156,7 +156,7 @@ struct LumaMemoryWindowView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color.red.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(Rectangle())
                 .onHover { hovering in
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
@@ -173,7 +173,7 @@ struct LumaMemoryWindowView: View {
                         ? Color.accentColor
                         : Color(NSColor.controlColor).opacity(0.60)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(Rectangle())
                 .disabled(!hasUnsavedChanges || isSaving)
                 .onHover { hovering in
                     if hovering && hasUnsavedChanges { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -187,6 +187,7 @@ struct LumaMemoryWindowView: View {
             // ── Text editor ───────────────────────────────────────────────────
             TextEditor(text: $memoryContent)
                 .font(.system(size: 12, design: .monospaced))
+                .tint(.white)
                 .scrollContentBackground(.hidden)
                 .background(Color(NSColor.textBackgroundColor))
         }
