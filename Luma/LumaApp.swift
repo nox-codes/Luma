@@ -65,6 +65,7 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         }
         registerAsLoginItemIfNeeded()
         startSparkleUpdater()
+        scheduleSparkleBackgroundUpdateCheck()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -108,6 +109,15 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
             try updaterController.updater.start()
         } catch {
             LumaLogger.log("⚠️ Luma: Sparkle updater failed to start: \(error)")
+        }
+    }
+
+    /// Silently checks for updates in the background 5 seconds after launch.
+    /// Unlike checkForUpdates(_:), this only shows a sheet when an actual update
+    /// is found — no "you're up to date" dialog if everything is current.
+    private func scheduleSparkleBackgroundUpdateCheck() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            self?.sparkleUpdaterController?.updater.checkForUpdatesInBackground()
         }
     }
 }
