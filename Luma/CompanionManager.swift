@@ -1326,6 +1326,12 @@ final class CompanionManager: ObservableObject {
             // Clear any previous API error so the panel doesn't show stale info
             lastAPIErrorMessage = nil
 
+            // Capture whether the floating input panel triggered this request.
+            // FloatingPanelState.isStreaming is true only while a floating-input-sent
+            // request is in flight — it becomes false after finishResponse() so we
+            // must snapshot it here before the API call begins.
+            let wasTriggeredByFloatingInput = FloatingPanelState.shared.isStreaming
+
             // Compress the transcript before guide matching and Claude routing.
             // Reduces token usage by ~50-60% on an average voice query while preserving intent.
             // The original transcript is kept for conversation history so context is human-readable.
@@ -1444,20 +1450,46 @@ final class CompanionManager: ObservableObject {
                     let extractedSteps = Self.parseStepsFromTaggedResponse(fullResponseText)
                     if !extractedSteps.isEmpty {
                         let spokenIntroText = Self.stripStepsTagFromResponse(fullResponseText)
-                        LumaLogger.log("[Luma] Multi-step: \(extractedSteps.count) step(s) extracted — starting walkthrough")
-                        if !spokenIntroText.isEmpty {
-                            try? await nativeTTSClient.speakText(spokenIntroText)
+                        LumaLogger.log("[Luma] Multi-step: \(extractedSteps.count) step(s) extracted")
+
+                        if wasTriggeredByFloatingInput {
+                            // Text (floating input) mode: speak the intro text and then each
+                            // step instruction sequentially. The formatted steps are already
+                            // visible in the floating panel via displayResponse, so TTS reads
+                            // them aloud without launching the interactive WalkthroughEngine.
+                            LumaLogger.log("[Luma] Multi-step (text mode): reading steps aloud, skipping walkthrough")
                             voiceState = .responding
-                            // Wait for the intro to finish before WalkthroughEngine starts speaking.
-                            // Both use separate AVSpeechSynthesizer instances so without this wait
-                            // the step 1 instruction overlaps the intro simultaneously.
-                            await nativeTTSClient.waitUntilFinished()
+                            if !spokenIntroText.isEmpty {
+                                try? await nativeTTSClient.speakText(spokenIntroText)
+                                await nativeTTSClient.waitUntilFinished()
+                            }
+                            for (stepIndex, step) in extractedSteps.enumerated() {
+                                let stepPhrase = "Step \(stepIndex + 1). \(step.instruction)"
+                                try? await nativeTTSClient.speakText(stepPhrase)
+                                await nativeTTSClient.waitUntilFinished()
+                            }
+                            voiceState = .idle
+                            scheduleTransientHideIfNeeded()
+                            return
+                        } else {
+                            // Voice mode: speak the intro first, then hand steps to WalkthroughEngine
+                            // which executes them interactively (pointing at UI elements, waiting
+                            // for the user to complete each one before advancing).
+                            LumaLogger.log("[Luma] Multi-step (voice mode): starting walkthrough")
+                            if !spokenIntroText.isEmpty {
+                                try? await nativeTTSClient.speakText(spokenIntroText)
+                                voiceState = .responding
+                                // Wait for the intro to finish before WalkthroughEngine starts speaking.
+                                // Both use separate AVSpeechSynthesizer instances so without this wait
+                                // the step 1 instruction overlaps the intro simultaneously.
+                                await nativeTTSClient.waitUntilFinished()
+                            }
+                            voiceState = .idle
+                            FloatingPanelState.shared.finishResponse()
+                            scheduleTransientHideIfNeeded()
+                            WalkthroughEngine.shared.executeSteps(extractedSteps)
+                            return
                         }
-                        voiceState = .idle
-                        FloatingPanelState.shared.finishResponse()
-                        scheduleTransientHideIfNeeded()
-                        WalkthroughEngine.shared.executeSteps(extractedSteps)
-                        return
                     }
                     // The model didn't produce a valid <STEPS> block — speaking the full response
                     // text would read out a structured step plan which sounds terrible via TTS.
@@ -1469,15 +1501,17 @@ final class CompanionManager: ObservableObject {
                     voiceState = .idle
                     FloatingPanelState.shared.finishResponse()
                     scheduleTransientHideIfNeeded()
-                    Task {
-                        do {
-                            let frontmostAppNameForPlanner = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
-                            let plan = try await TaskPlanner().planSteps(goal: compressedTranscript, frontmostAppName: frontmostAppNameForPlanner)
-                            if !plan.steps.isEmpty {
-                                WalkthroughEngine.shared.executeSteps(plan.steps)
+                    if !wasTriggeredByFloatingInput {
+                        Task {
+                            do {
+                                let frontmostAppNameForPlanner = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+                                let plan = try await TaskPlanner().planSteps(goal: compressedTranscript, frontmostAppName: frontmostAppNameForPlanner)
+                                if !plan.steps.isEmpty {
+                                    WalkthroughEngine.shared.executeSteps(plan.steps)
+                                }
+                            } catch {
+                                LumaLogger.log("[Luma] TaskPlanner fallback failed: \(error.localizedDescription)")
                             }
-                        } catch {
-                            LumaLogger.log("[Luma] TaskPlanner fallback failed: \(error.localizedDescription)")
                         }
                     }
                     return

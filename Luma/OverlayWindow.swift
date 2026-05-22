@@ -179,6 +179,15 @@ struct BlueCursorView: View {
     /// Animated with a spring defined in CompanionConfig whenever buddyNavigationMode changes.
     @State private var companionMorphProgress: Double = 0.0
 
+    /// Thin border color for the speech bubbles so they read on any background.
+    /// Black at low opacity for the white accent (which would be invisible on white surfaces),
+    /// white at low opacity for all other accent colors.
+    private var bubbleBorderColor: Color {
+        LumaAccentTheme(rawValue: accentThemeID) == .white
+            ? Color.black.opacity(0.25)
+            : Color.white.opacity(0.35)
+    }
+
     private let fullWelcomeMessage = "hey! i'm luma"
 
     private let navigationPointerPhrases = [
@@ -211,6 +220,10 @@ struct BlueCursorView: View {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(DS.Colors.overlayCursorBlue)
                             .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 6, x: 0, y: 0)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(bubbleBorderColor, lineWidth: 0.75)
                     )
                     .fixedSize()
                     .overlay(
@@ -249,6 +262,10 @@ struct BlueCursorView: View {
                                 x: 0, y: 0
                             )
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(bubbleBorderColor, lineWidth: 0.75)
+                    )
                     .fixedSize(horizontal: navigationBubbleText.count <= 40, vertical: true)
                     .overlay(
                         GeometryReader { geo in
@@ -286,6 +303,10 @@ struct BlueCursorView: View {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(DS.Colors.overlayCursorBlue)
                             .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 8, x: 0, y: 0)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(bubbleBorderColor, lineWidth: 0.75)
                     )
                     .fixedSize(horizontal: agentSummaryBubbleText.count <= 40, vertical: true)
                     .overlay(

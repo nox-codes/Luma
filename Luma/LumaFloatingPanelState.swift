@@ -28,21 +28,30 @@ final class FloatingPanelState: ObservableObject {
     /// does not notify SwiftUI.
     @Published var draft: String = ""
 
-    /// Response text with all internal tags stripped, safe to display to the user.
-    /// Removes:
-    ///   - [POINT:...] navigation tags (e.g. "[POINT:x,y:label:screen0]")
-    ///   - <STEPS>...</STEPS> JSON blocks used by the walkthrough pipeline
+    /// Response text with internal tags replaced or stripped, safe to display to the user.
+    /// Transforms:
+    ///   - <STEPS>...</STEPS> JSON blocks → human-readable "Step 1: ..., Step 2: ..." list
+    ///   - [POINT:...] navigation tags → removed entirely
     var displayResponse: String {
         guard !response.isEmpty else { return "" }
 
         var text = response
 
-        // Strip <STEPS>...</STEPS> blocks including all content between them.
-        if let stepsRegex = try? NSRegularExpression(
-            pattern: #"<STEPS>[\s\S]*?</STEPS>"#
-        ) {
+        // Replace <STEPS>...</STEPS> blocks with a formatted numbered step list.
+        // Matches are processed in reverse order so character indices don't shift mid-loop.
+        if let stepsRegex = try? NSRegularExpression(pattern: #"<STEPS>([\s\S]*?)</STEPS>"#) {
             let fullRange = NSRange(text.startIndex..., in: text)
-            text = stepsRegex.stringByReplacingMatches(in: text, range: fullRange, withTemplate: "")
+            let matches = stepsRegex.matches(in: text, range: fullRange).reversed()
+            for match in matches {
+                guard let matchRange = Range(match.range, in: text) else { continue }
+                let formattedSteps: String
+                if match.numberOfRanges >= 2, let jsonRange = Range(match.range(at: 1), in: text) {
+                    formattedSteps = Self.formattedStepListFromJSON(String(text[jsonRange]))
+                } else {
+                    formattedSteps = ""
+                }
+                text.replaceSubrange(matchRange, with: formattedSteps)
+            }
         }
 
         // Strip [POINT:...] navigation tags.
@@ -52,6 +61,32 @@ final class FloatingPanelState: ObservableObject {
         }
 
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Parses a STEPS JSON block and returns a markdown-formatted numbered step list.
+    /// Uses the same "anchor on 'steps' key" strategy as CompanionManager to tolerate
+    /// extra whitespace or wrapper text the AI adds inside the tags.
+    /// Returns an empty string when the JSON is absent, malformed, or contains no steps.
+    private static func formattedStepListFromJSON(_ jsonContent: String) -> String {
+        guard let stepsKeyRange = jsonContent.range(of: "\"steps\""),
+              let objectStart = jsonContent[..<stepsKeyRange.lowerBound].lastIndex(of: "{"),
+              let objectEnd = jsonContent.lastIndex(of: "}"),
+              objectStart <= objectEnd else { return "" }
+
+        let jsonString = String(jsonContent[objectStart...objectEnd])
+
+        guard let data = jsonString.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let steps = root["steps"] as? [[String: Any]] else { return "" }
+
+        let stepLines = steps.enumerated().compactMap { (stepIndex, step) -> String? in
+            let instruction = step["instruction"] as? String ?? ""
+            guard !instruction.isEmpty else { return nil }
+            return "**Step \(stepIndex + 1):** \(instruction)"
+        }
+
+        guard !stepLines.isEmpty else { return "" }
+        return "\n\n" + stepLines.joined(separator: "\n")
     }
 
     private init() {}
