@@ -84,9 +84,9 @@ final class CompanionManager: ObservableObject {
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let tutorialManager = PostOnboardingTutorialManager()
-    /// Fires after 30 seconds of no interaction and hides all visible Luma UI.
+    /// Fires after 5 minutes of no interaction and hides all visible Luma UI.
     /// The menu bar icon stays visible. Suspended during onboarding.
-    let idleTimer = LumaIdleTimer(interval: 30)
+    let idleTimer = LumaIdleTimer(interval: 300)
     /// Agent completion summary to surface in the pointer-phrase speech bubble
     /// that appears next to the cursor. Set when a task transitions running→ready;
     /// auto-cleared after 6 seconds so the bubble fades away naturally.
@@ -331,7 +331,7 @@ final class CompanionManager: ObservableObject {
                 LumaLogger.log("[LumaIdleTimer] Skipping hide — voice state is \(self.voiceState)")
                 self.idleTimer.reset()
             case .idle:
-                LumaLogger.log("[LumaIdleTimer] 30s idle — hiding Luma UI")
+                LumaLogger.log("[LumaIdleTimer] 5min idle — hiding Luma UI")
                 self.overlayWindowManager.hideOverlay()
                 self.isOverlayVisible = false
                 // Floating text input is a separate user-triggered tool — never hidden by the idle timer.

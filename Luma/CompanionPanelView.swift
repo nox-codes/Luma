@@ -167,6 +167,11 @@ struct CompanionPanelView: View {
                 tutorialOverlayCard
             }
         }
+        .overlay {
+            if showQuitConfirmation {
+                retroQuitConfirmationDialog
+            }
+        }
         .onAppear {
             // Start the post-onboarding tutorial the first time the panel opens
             // after onboarding completes. startIfNeeded() is a no-op if already done.
@@ -189,10 +194,6 @@ struct CompanionPanelView: View {
             } onCancel: {
                 showPINEntryForSettings = false
             }
-        }
-        .alert("Quit Luma?", isPresented: $showQuitConfirmation) {
-            Button("Quit", role: .destructive) { NSApp.terminate(nil) }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -363,10 +364,10 @@ struct CompanionPanelView: View {
             }
 
             HStack(spacing: 8) {
-                // Triggers Sparkle's native install sheet instead of opening a browser link
+                // Triggers Sparkle's native install sheet instead of opening a browser link.
+                // Does NOT dismiss the card — the card stays visible while Sparkle runs.
                 Button("Install Update") {
                     NotificationCenter.default.post(name: .lumaCheckForUpdates, object: nil)
-                    updateManager.dismissUpdate(versionTag: "v\(update.version)")
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .semibold))
@@ -1044,6 +1045,94 @@ struct CompanionPanelView: View {
         case .responding:
             return "Responding"
         }
+    }
+
+    // MARK: - Quit Confirmation Dialog
+
+    /// Full-panel retro-styled quit confirmation overlay.
+    /// Replaces the default macOS .alert sheet with a custom dark monospaced dialog
+    /// that matches the rest of the app's aesthetic.
+    private var retroQuitConfirmationDialog: some View {
+        ZStack {
+            // Dim backdrop covering the entire panel
+            Rectangle()
+                .fill(Color.black.opacity(0.65))
+                .ignoresSafeArea()
+
+            // Dialog box
+            VStack(alignment: .leading, spacing: 0) {
+                // Title row — monospaced uppercase label matching the header badge style
+                HStack(spacing: 8) {
+                    Rectangle()
+                        .fill(DS.Colors.destructive)
+                        .frame(width: 8, height: 8)
+
+                    Text("QUIT LUMA?")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(DS.Colors.textPrimary)
+
+                    Spacer()
+                }
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.vertical, DS.Spacing.md)
+                .background(DS.Colors.surface2)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundColor(DS.Colors.borderSubtle),
+                    alignment: .bottom
+                )
+
+                // Body text
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                    Text("Luma will stop listening and close.")
+                        .font(.system(size: 12))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.vertical, DS.Spacing.lg)
+
+                // Button row — Cancel on the left, Quit on the right
+                HStack(spacing: DS.Spacing.sm) {
+                    // Cancel button — outlined ghost style
+                    Button(action: { withAnimation(.easeOut(duration: 0.15)) { showQuitConfirmation = false } }) {
+                        Text("Cancel")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(DS.Colors.surface3)
+                            .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+
+                    // Quit button — solid destructive fill
+                    Button(action: { NSApp.terminate(nil) }) {
+                        Text("Quit")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(DS.Colors.destructive)
+                            .overlay(Rectangle().stroke(DS.Colors.destructive.opacity(0.5), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.bottom, DS.Spacing.lg)
+            }
+            .background(DS.Colors.surface1)
+            .overlay(Rectangle().stroke(DS.Colors.borderStrong, lineWidth: 1))
+            .padding(.horizontal, DS.Spacing.xl)
+        }
+        .transition(.opacity)
     }
 
 }
