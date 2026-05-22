@@ -64,7 +64,6 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
             menuBarPanelManager?.showPanelOnLaunch()
         }
         registerAsLoginItemIfNeeded()
-        LumaUpdateManager.shared.startChecking()
         startSparkleUpdater()
     }
 
@@ -95,10 +94,26 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         )
         self.sparkleUpdaterController = updaterController
 
+        // Listen for requests from the companion panel to trigger a manual Sparkle update check.
+        // The panel posts .lumaCheckForUpdates when the user taps the update icon in the bottom bar.
+        NotificationCenter.default.addObserver(
+            forName: .lumaCheckForUpdates,
+            object: nil,
+            queue: .main
+        ) { [weak updaterController] _ in
+            updaterController?.checkForUpdates(nil)
+        }
+
         do {
             try updaterController.updater.start()
         } catch {
             LumaLogger.log("⚠️ Luma: Sparkle updater failed to start: \(error)")
         }
     }
+}
+
+extension Notification.Name {
+    /// Posted by the companion panel when the user taps "Check for Updates".
+    /// Observed by CompanionAppDelegate to invoke Sparkle's native update flow.
+    static let lumaCheckForUpdates = Notification.Name("lumaCheckForUpdates")
 }

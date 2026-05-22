@@ -3,6 +3,15 @@
     <channel>
         <title>Luma</title>
         <item>
+            <title>0.5.7</title>
+            <pubDate>Fri, 22 May 2026 11:06:39 +0100</pubDate>
+            <sparkle:version>0.5.7</sparkle:version>
+            <sparkle:shortVersionString>0.5.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/nox-codes/Luma/releases/download/v0.5.7/Luma.dmg" length="43988156" type="application/octet-stream" sparkle:edSignature="p+FKDdLut4j2B2op47AKh50fIszRy7UmooksXfn0y65LID52StsqOXLqA9HnVTkaxthEFov0WElL9GLCMCAWDQ=="/>
+        </item>
+        <item>
             <title>0.5.6</title>
             <pubDate>Fri, 22 May 2026 09:53:00 +0100</pubDate>
             <sparkle:version>0.5.6</sparkle:version>
@@ -18,16 +27,7 @@
             <sparkle:shortVersionString>0.5.5</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/nox-codes/Luma/releases/download/v0.5.6/Luma.dmg" length="44013202" type="application/octet-stream" sparkle:edSignature="jlvvmjGPO5aMmUaoKiVBJ4YcHaRGvLnWL9he2GJB45GtfN0zvhPGfcwBGFXF5emMsHMTBkhGCHAfQOiSl7FbBg=="/>
-        </item>
-        <item>
-            <title>0.5.3</title>
-            <pubDate>Fri, 22 May 2026 08:50:19 +0100</pubDate>
-            <sparkle:version>0.5.3</sparkle:version>
-            <sparkle:shortVersionString>0.5.3</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/nox-codes/Luma/releases/download/v0.5.6/Luma.dmg" length="43994428" type="application/octet-stream" sparkle:edSignature="SwFKEIPJiKcCkR5eIjdPN6nquJq6it3m50eHozy9LXTASI+24YDBbOyxRH/+CDuhIKn+rW+IZdoFkP5FxqqgBg=="/>
+            <enclosure url="https://github.com/nox-codes/Luma/releases/download/v0.5.5/Luma.dmg" length="44013202" type="application/octet-stream" sparkle:edSignature="jlvvmjGPO5aMmUaoKiVBJ4YcHaRGvLnWL9he2GJB45GtfN0zvhPGfcwBGFXF5emMsHMTBkhGCHAfQOiSl7FbBg=="/>
         </item>
     </channel>
 </rss>
