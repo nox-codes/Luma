@@ -17,10 +17,16 @@ struct CompanionPanelView: View {
     @ObservedObject private var tutorialManager: PostOnboardingTutorialManager
     /// Observed so the panel re-renders on every walkthrough state transition.
     @ObservedObject private var walkthroughEngine = WalkthroughEngine.shared
+    /// Observed so the panel re-renders when a new update is available or dismissed.
+    @ObservedObject private var updateManager = LumaUpdateManager.shared
+
     // Observing this key causes the panel to re-render when the accent theme changes,
     // so DS.Colors.accent / DS.Colors.accentText (which read LumaAccentTheme.current)
     // immediately reflect the new color across all panel UI.
     @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
+    /// Beta-update preference. Stored here so the toggle has a direct binding.
+    /// LumaUpdateManager reads the same UserDefaults key when filtering becomes active.
+    @AppStorage("luma_include_beta_updates") private var includeBetaUpdates: Bool = true
 
     init(companionManager: CompanionManager) {
         self.companionManager = companionManager
@@ -43,6 +49,16 @@ struct CompanionPanelView: View {
             Divider()
                 .background(DS.Colors.borderSubtle)
                 .padding(.horizontal, DS.Spacing.lg)
+
+            // Update card — shown directly below the header when LumaUpdateManager
+            // has found a newer release on GitHub. Download button triggers Sparkle install.
+            if let pendingUpdate = LumaUpdateManager.shared.availableUpdate {
+                updateAvailableCard(update: pendingUpdate)
+                    .padding(.horizontal, DS.Spacing.lg)
+                    .padding(.top, DS.Spacing.lg)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .animation(.easeInOut(duration: 0.2), value: LumaUpdateManager.shared.availableUpdate != nil)
+            }
 
             permissionsCopySection
                 .padding(.top, DS.Spacing.lg)
@@ -128,6 +144,12 @@ struct CompanionPanelView: View {
             //     showLumaCursorToggleRow
             //         .padding(.horizontal, 16)
             // }
+
+            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+                betaUpdatesToggleRow
+                    .padding(.horizontal, DS.Spacing.lg)
+                    .padding(.top, DS.Spacing.sm)
+            }
 
             Spacer()
                 .frame(height: 12)
@@ -290,6 +312,112 @@ struct CompanionPanelView: View {
                         .stroke(Color(red: 1.0, green: 0.6, blue: 0.4).opacity(0.3), lineWidth: 1)
                 )
         )
+    }
+
+    // MARK: - Update Available Card
+
+    /// Shown at the top of the panel when LumaUpdateManager detects a newer release.
+    /// "Install Update" posts .lumaCheckForUpdates which triggers Sparkle's native install sheet.
+    private func updateAvailableCard(update: LumaReleaseInfo) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(DS.Colors.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text("Update available")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DS.Colors.textPrimary)
+
+                        Text("v\(update.version)")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(DS.Colors.accentText)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Rectangle().fill(DS.Colors.accentSubtle))
+                            .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
+
+                        if update.isBeta {
+                            Text("BETA")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(Color.orange)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Rectangle().fill(Color.orange.opacity(0.15)))
+                                .overlay(Rectangle().stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                        }
+                    }
+
+                    if !update.subtitle.isEmpty {
+                        Text(update.subtitle)
+                            .font(.system(size: 11))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                // Triggers Sparkle's native install sheet instead of opening a browser link
+                Button("Install Update") {
+                    NotificationCenter.default.post(name: .lumaCheckForUpdates, object: nil)
+                    updateManager.dismissUpdate(versionTag: "v\(update.version)")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(DS.Colors.textOnAccent)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
+                .background(Rectangle().fill(DS.Colors.accent))
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+
+                Button("Dismiss") {
+                    updateManager.dismissUpdate(versionTag: "v\(update.version)")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            }
+        }
+        .padding(10)
+        .background(
+            Rectangle()
+                .fill(Color(red: 0.05, green: 0.10, blue: 0.18))
+                .overlay(Rectangle().stroke(Color(red: 0.12, green: 0.22, blue: 0.38), lineWidth: 1))
+        )
+    }
+
+    // MARK: - Beta Updates Toggle
+
+    private var betaUpdatesToggleRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "flask")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(DS.Colors.textTertiary)
+                .frame(width: 16)
+
+            Text("Beta updates")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+
+            Spacer()
+
+            Toggle("", isOn: $includeBetaUpdates)
+                .toggleStyle(RetroToggleStyle())
+                .labelsHidden()
+                .help("Include beta releases when checking for updates")
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Text Input Fallback

@@ -438,7 +438,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 0.5.7.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nox.luma;
 				PRODUCT_NAME = Luma;
 				REGISTER_APP_GROUPS = YES;
@@ -462,7 +462,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 0.5.7.5;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = D4DF3MFTSP;
 				ENABLE_APP_SANDBOX = NO;
@@ -488,7 +488,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 0.5.7.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nox.luma;
 				PRODUCT_NAME = Luma;
 				REGISTER_APP_GROUPS = YES;

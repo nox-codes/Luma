@@ -33,6 +33,8 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPanelManager: MenuBarPanelManager?
     private let companionManager = CompanionManager()
     private var sparkleUpdaterController: SPUStandardUpdaterController?
+    /// Held strongly because SPUStandardUpdaterController stores the delegate weakly.
+    private var sparkleActivationDelegate: SparkleActivationDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Force dark appearance app-wide so system controls (Picker, TextField, etc.)
@@ -64,8 +66,8 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
             menuBarPanelManager?.showPanelOnLaunch()
         }
         registerAsLoginItemIfNeeded()
+        LumaUpdateManager.shared.startChecking()
         startSparkleUpdater()
-        scheduleSparkleBackgroundUpdateCheck()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -88,10 +90,13 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startSparkleUpdater() {
+        let activationDelegate = SparkleActivationDelegate()
+        self.sparkleActivationDelegate = activationDelegate
+
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false,
             updaterDelegate: nil,
-            userDriverDelegate: nil
+            userDriverDelegate: activationDelegate
         )
         self.sparkleUpdaterController = updaterController
 
@@ -102,7 +107,30 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak updaterController] _ in
-            updaterController?.checkForUpdates(nil)
+            guard let updater = updaterController?.updater else {
+                LumaLogger.log("[Sparkle] updater is nil — cannot check")
+                return
+            }
+            LumaLogger.log("[Sparkle] checkForUpdates triggered — canCheck: \(updater.canCheckForUpdates)")
+
+            // Hide Luma's floating panel immediately so it doesn't sit on top
+            // of Sparkle's update window (floating level > normal level).
+            NSApp.windows
+                .filter { $0 is NSPanel && $0.level == .floating }
+                .forEach { $0.orderOut(nil) }
+
+            // Use updater.checkForUpdates() directly — the controller wrapper
+            // silently skips the call when canCheckForUpdates is false (e.g. if
+            // a background check is still pending). The direct call bypasses that.
+            updater.checkForUpdates()
+
+            // After a short delay, force any new Sparkle windows to the front
+            // in case activation policy hasn't propagated yet.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NSApp.windows
+                    .filter { $0.isVisible && !($0 is NSPanel) }
+                    .forEach { $0.makeKeyAndOrderFront(nil) }
+            }
         }
 
         do {
@@ -112,13 +140,39 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Silently checks for updates in the background 5 seconds after launch.
-    /// Unlike checkForUpdates(_:), this only shows a sheet when an actual update
-    /// is found — no "you're up to date" dialog if everything is current.
-    private func scheduleSparkleBackgroundUpdateCheck() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.sparkleUpdaterController?.updater.checkForUpdatesInBackground()
-        }
+}
+
+/// Manages activation policy around Sparkle's update UI.
+///
+/// Luma runs as an LSUIElement (.accessory) app — it has no dock icon and never
+/// becomes the frontmost application on its own. Sparkle creates real NSWindows
+/// for its progress/update sheets, but those windows stay hidden behind other apps
+/// because the app is never "active". This delegate switches to .regular while
+/// Sparkle UI is on screen so its windows receive focus, then switches back to
+/// .accessory when the session ends.
+private final class SparkleActivationDelegate: NSObject, SPUStandardUserDriverDelegate {
+
+    /// Called before Sparkle is about to show a new update alert to the user.
+    /// Activate the app so the alert window can come to the front.
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        LumaLogger.log("[Sparkle] willHandleShowingUpdate — activating app")
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func standardUserDriverWillShowModalAlert() {
+        LumaLogger.log("[Sparkle] willShowModalAlert — activating app")
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        LumaLogger.log("[Sparkle] willFinishUpdateSession — returning to accessory")
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

@@ -3,6 +3,15 @@
     <channel>
         <title>Luma</title>
         <item>
+            <title>0.5.7.5</title>
+            <pubDate>Fri, 22 May 2026 13:04:29 +0100</pubDate>
+            <sparkle:version>0.5.7.5</sparkle:version>
+            <sparkle:shortVersionString>0.5.7.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/nox-codes/Luma/releases/download/0.5.7.5/Luma.dmg" length="44029922" type="application/octet-stream" sparkle:edSignature="9AAAd7++TbL9JpmJZqPPQ1EKm3Kc848U88Cx7Ch67wFfL+mJ7GATAtAkgPy70W9HboAqenhhVXH7ELZ73Oi8DA=="/>
+        </item>
+        <item>
             <title>0.5.7</title>
             <pubDate>Fri, 22 May 2026 11:53:03 +0100</pubDate>
             <sparkle:version>0.5.7</sparkle:version>
@@ -19,15 +28,6 @@
             <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/nox-codes/Luma/releases/download/0.5.6/Luma.dmg" length="43988156" type="application/octet-stream" sparkle:edSignature="p+FKDdLut4j2B2op47AKh50fIszRy7UmooksXfn0y65LID52StsqOXLqA9HnVTkaxthEFov0WElL9GLCMCAWDQ=="/>
-        </item>
-        <item>
-            <title>0.5.5</title>
-            <pubDate>Fri, 22 May 2026 09:35:41 +0100</pubDate>
-            <sparkle:version>0.5.5</sparkle:version>
-            <sparkle:shortVersionString>0.5.5</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/nox-codes/Luma/releases/download/0.5.5/Luma.dmg" length="44013202" type="application/octet-stream" sparkle:edSignature="jlvvmjGPO5aMmUaoKiVBJ4YcHaRGvLnWL9he2GJB45GtfN0zvhPGfcwBGFXF5emMsHMTBkhGCHAfQOiSl7FbBg=="/>
         </item>
     </channel>
 </rss>
