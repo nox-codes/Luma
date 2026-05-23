@@ -302,16 +302,16 @@ final class CompanionManager: ObservableObject {
         }
         mouseWiggleDetector.start()
 
-        // Observe auto-hide preference changes so the timer adapts without needing
-        // an app restart when the user adjusts the setting in Customization.
+        // Observe the targeted auto-hide settings notification posted by CustomizationTabView
+        // the moment the user changes the toggle or interval. This is more reliable than
+        // UserDefaults.didChangeNotification, which fires for every unrelated defaults write
+        // and wrapping it in Task { @MainActor } can race with idleTimer.reset() calls.
         NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
+            forName: LumaAutoHideInterval.settingsChangedNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.applyAutoHideSettingsToIdleTimer()
-            }
+            self?.applyAutoHideSettingsToIdleTimer()
         }
 
         refreshAllPermissions()

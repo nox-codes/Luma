@@ -1267,6 +1267,15 @@ private struct CustomizationTabView: View {
                 .animation(.easeInOut(duration: 0.15), value: isAutoHideEnabled)
             }
         }
+        // Fire the custom notification immediately when either setting changes so
+        // CompanionManager updates the idle timer without relying on the unreliable
+        // UserDefaults.didChangeNotification path.
+        .onChange(of: isAutoHideEnabled) { _ in
+            NotificationCenter.default.post(name: LumaAutoHideInterval.settingsChangedNotification, object: nil)
+        }
+        .onChange(of: autoHideIntervalSeconds) { _ in
+            NotificationCenter.default.post(name: LumaAutoHideInterval.settingsChangedNotification, object: nil)
+        }
     }
 
     private func autoHideIntervalRow(interval: LumaAutoHideInterval) -> some View {

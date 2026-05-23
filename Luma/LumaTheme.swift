@@ -136,14 +136,14 @@ struct LumaTheme {
 
     /// Stroke color drawn around the companion in its idle / cursor-following state.
     /// Set width to 0 to disable the border entirely.
-    static let companionBorderColor: Color  = .white.opacity(0.5)
+    static let companionBorderColor: Color  = .black.opacity(0.5)
     static let companionBorderWidth: CGFloat = 1.0
 
     // MARK: Companion Border (morph target / pointing state)
 
     /// Stroke color drawn around the companion after morphing into the target shape.
     /// Cross-fades with the idle border as the morph progresses.
-    static let companionMorphTargetBorderColor: Color  = .white.opacity(0.25)
+    static let companionMorphTargetBorderColor: Color  = .black.opacity(0.75)
     static let companionMorphTargetBorderWidth: CGFloat = 1.5
 
     /// Spring response for the morph animation. Lower = faster / snappier.

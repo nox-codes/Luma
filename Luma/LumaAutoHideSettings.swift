@@ -43,6 +43,11 @@ enum LumaAutoHideInterval: Double, CaseIterable, Identifiable {
     /// A stored value of 0 means "Never".
     static let intervalUserDefaultsKey = "luma_auto_hide_interval_seconds"
 
+    /// Posted by CustomizationTabView when the user changes the auto-hide toggle or interval.
+    /// CompanionManager observes this to update the idle timer immediately, bypassing the
+    /// unreliable UserDefaults.didChangeNotification path.
+    static let settingsChangedNotification = Notification.Name("lumaAutoHideSettingsChanged")
+
     /// Registers sensible defaults so first-launch behaviour is auto-hide after 5 minutes.
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [

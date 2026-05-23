@@ -9,7 +9,7 @@
             <sparkle:shortVersionString>0.5.8</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.6</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/nox-codes/Luma/releases/download/0.5.8/Luma.dmg" length="44078884" type="application/octet-stream" sparkle:edSignature="z59nPPNS1RGbIlwbnmAoGswGf+TJ1/d+msl3yPpLCpK/Cyj2zClR9E6Zqk9pF3UZbYRiS9GS/KRhZ1feUbrWCA=="/>
+            <enclosure url="https://github.com/nox-codes/Luma/releases/download/0.5.8/Luma.dmg" length="44080989" type="application/octet-stream" sparkle:edSignature="dXVcjKkjuBDzofQc7Pa+5b6+cZfGCr6sbFXwtg6dJFpblBjLoQOFywO3K/zskA+lLoevzyZVVkZX8vuoh2u4Bg=="/>
         </item>
         <item>
             <title>0.5.7.5</title>

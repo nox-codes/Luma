@@ -1161,8 +1161,14 @@ enum CompanionConfig {
     // MARK: Border (idle state)
 
     /// Stroke color drawn around the companion in its idle / cursor-following state.
-    static let borderColor: Color  = .white.opacity(0.5)
-    static let borderWidth: CGFloat = 1.0
+    /// Switches to dark when the accent theme is white so the border stays visible
+    /// against the white fill instead of disappearing into it.
+    static var borderColor: Color {
+        LumaAccentTheme.current == .white
+            ? Color.black.opacity(0.5)
+            : Color.white.opacity(0.5)
+    }
+    static let borderWidth: CGFloat = 1.2
 
     // MARK: Morph Target
 
@@ -1177,9 +1183,14 @@ enum CompanionConfig {
     /// Also reads the accent theme dynamically so the pointing triangle matches.
     static var morphTargetColor: Color { LumaAccentTheme.current.cursorColor }
 
-    /// Border in the morph target state.
-    static let morphTargetBorderColor: Color  = .white.opacity(0.25)
-    static let morphTargetBorderWidth: CGFloat = 1.5
+    /// Border in the morph target (pointing) state.
+    /// Switches to dark when the accent theme is white, matching the idle border logic.
+    static var morphTargetBorderColor: Color {
+        LumaAccentTheme.current == .white
+            ? Color.black.opacity(0.6)
+            : Color.white.opacity(0.6)
+    }
+    static let morphTargetBorderWidth: CGFloat = 1.2
 
     // MARK: Corner Radius
 
@@ -1187,7 +1198,7 @@ enum CompanionConfig {
     static let cornerRadius: CGFloat = 0
 
     /// Corner radius for the companion when morphed to its target shape.
-    static let morphTargetCornerRadius: CGFloat = 6
+    static let morphTargetCornerRadius: CGFloat = 12
 
     // MARK: Morph Animation
 
@@ -1196,7 +1207,8 @@ enum CompanionConfig {
     /// Spring damping for the morph animation. Lower = more bounce. 1.0 = no bounce.
     static let morphSpringDamping: Double = 0.36
     /// Number of outline sample points used to interpolate between shapes.
-    static let morphPointCount: Int = 36
+    /// Higher = smoother curves, especially for the rounded triangle corners.
+    static let morphPointCount: Int = 72
 }
 
 // MARK: - Morphing Companion Shape
