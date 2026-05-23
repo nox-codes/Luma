@@ -19,11 +19,13 @@ final class LumaIdleTimer {
     /// Closure called when the idle interval elapses with no interaction.
     var onTimeout: (() -> Void)?
 
-    private let idleInterval: TimeInterval
+    /// The duration (seconds) of inactivity before `onTimeout` fires.
+    /// Can be updated at runtime — takes effect on the next `start()` or `reset()`.
+    var idleInterval: TimeInterval
     private var timer: DispatchSourceTimer?
     private(set) var isSuspended: Bool = false
 
-    init(interval: TimeInterval = 30) {
+    init(interval: TimeInterval = 300) {
         self.idleInterval = interval
     }
 

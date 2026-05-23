@@ -1138,11 +1138,15 @@ private struct CustomizationTabView: View {
 
     @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.white.rawValue
     @StateObject private var floatingStyleManager = FloatingInputStyleManager.shared
+    @AppStorage(LumaAutoHideInterval.enabledUserDefaultsKey) private var isAutoHideEnabled: Bool = true
+    @AppStorage(LumaAutoHideInterval.intervalUserDefaultsKey) private var autoHideIntervalSeconds: Double = 300
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
                 accentThemeSection
+                Divider()
+                autoHideSection
                 Divider()
                 floatingInputStyleSection
                 Divider()
@@ -1199,6 +1203,112 @@ private struct CustomizationTabView: View {
         .onHover { isHovering in
             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+    }
+
+    // MARK: Auto-Hide
+
+    /// Auto-hide section: toggle + interval picker shown only when auto-hide is on.
+    /// Choosing "Never" keeps Luma's cursor visible until the user explicitly hides it.
+    private var autoHideSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            // Section header
+            Text("Auto-Hide")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.textPrimary)
+
+            Text("Automatically hide Luma's cursor overlay after a period of inactivity.")
+                .font(.system(size: 11))
+                .foregroundColor(DS.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+
+            // Enabled toggle row
+            HStack(spacing: 12) {
+                Toggle("", isOn: $isAutoHideEnabled)
+                    .toggleStyle(RetroToggleStyle())
+                    .labelsHidden()
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto-hide when idle")
+                        .font(.system(size: 13, weight: isAutoHideEnabled ? .semibold : .regular))
+                        .foregroundColor(isAutoHideEnabled ? DS.Colors.textPrimary : DS.Colors.textSecondary)
+                    Text("Shake your mouse at any time to wake Luma back up.")
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Rectangle().fill(isAutoHideEnabled ? DS.Colors.accentSubtle : DS.Colors.surface2))
+            .overlay(Rectangle().stroke(isAutoHideEnabled ? DS.Colors.accent.opacity(0.6) : DS.Colors.borderSubtle, lineWidth: 1))
+            .animation(.easeInOut(duration: 0.15), value: isAutoHideEnabled)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+            // Duration picker — only shown when auto-hide is enabled
+            if isAutoHideEnabled {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("HIDE AFTER")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(DS.Colors.textTertiary)
+                        .padding(.top, 6)
+
+                    VStack(spacing: 0) {
+                        ForEach(LumaAutoHideInterval.allCases) { interval in
+                            autoHideIntervalRow(interval: interval)
+                        }
+                    }
+                    .overlay(Rectangle().stroke(DS.Colors.borderSubtle, lineWidth: 1))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(.easeInOut(duration: 0.15), value: isAutoHideEnabled)
+            }
+        }
+    }
+
+    private func autoHideIntervalRow(interval: LumaAutoHideInterval) -> some View {
+        let isSelected = autoHideIntervalSeconds == interval.rawValue
+        return Button {
+            autoHideIntervalSeconds = interval.rawValue
+        } label: {
+            HStack(spacing: 12) {
+                // Selection indicator
+                ZStack {
+                    Rectangle()
+                        .stroke(isSelected ? DS.Colors.accent : DS.Colors.textTertiary.opacity(0.4), lineWidth: 1.5)
+                        .frame(width: 12, height: 12)
+                    if isSelected {
+                        Rectangle()
+                            .fill(DS.Colors.accent)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+
+                Text(interval.displayName)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular, design: .monospaced))
+                    .foregroundColor(isSelected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(DS.Colors.accent)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Rectangle().fill(isSelected ? DS.Colors.accentSubtle : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .animation(.easeInOut(duration: 0.1), value: isSelected)
     }
 
     // MARK: Floating Input Style

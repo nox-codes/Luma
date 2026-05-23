@@ -45,6 +45,7 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         LumaLogger.log("🎯 Luma: Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")")
 
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 0])
+        LumaAutoHideInterval.registerDefaults()
 
         // Only prompt for accessibility if onboarding is already done.
         // First-time users will be prompted for accessibility at the end of the

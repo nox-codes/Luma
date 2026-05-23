@@ -84,9 +84,14 @@ final class CompanionManager: ObservableObject {
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let tutorialManager = PostOnboardingTutorialManager()
-    /// Fires after 5 minutes of no interaction and hides all visible Luma UI.
+    /// Fires after the user-configured idle interval and hides all visible Luma UI.
     /// The menu bar icon stays visible. Suspended during onboarding.
+    /// Interval is read from UserDefaults (luma_auto_hide_interval_seconds) at startup
+    /// and whenever the user changes the setting in Customization.
     let idleTimer = LumaIdleTimer(interval: 300)
+    /// Detects rapid side-to-side mouse shake (like Apple's "shake to find cursor").
+    /// When a wiggle is detected: shows Luma if hidden, or resets the idle timer if visible.
+    private let mouseWiggleDetector = LumaMouseWiggleDetector()
     /// Agent completion summary to surface in the pointer-phrase speech bubble
     /// that appears next to the cursor. Set when a task transitions running→ready;
     /// auto-cleared after 6 seconds so the bubble fades away naturally.
@@ -275,6 +280,40 @@ final class CompanionManager: ObservableObject {
     }
 
     func start() {
+        // Register UserDefaults defaults for auto-hide before any reads happen.
+        LumaAutoHideInterval.registerDefaults()
+        // Apply the user-configured auto-hide interval to the idle timer right away.
+        applyAutoHideSettingsToIdleTimer()
+
+        // Wire the wiggle detector so rapid mouse shaking shows Luma or resets the timer.
+        mouseWiggleDetector.onWiggleDetected = { [weak self] in
+            guard let self else { return }
+            if !self.isOverlayVisible {
+                // Luma's cursor is hidden — a wiggle wakes it back up.
+                LumaLogger.log("[LumaMouseWiggleDetector] Wiggle woke Luma from hidden state")
+                self.overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
+                self.isOverlayVisible = true
+                self.applyAutoHideSettingsToIdleTimer()
+            } else {
+                // Luma is already visible — wiggle resets the idle countdown.
+                LumaLogger.log("[LumaMouseWiggleDetector] Wiggle reset idle timer")
+                self.idleTimer.reset()
+            }
+        }
+        mouseWiggleDetector.start()
+
+        // Observe auto-hide preference changes so the timer adapts without needing
+        // an app restart when the user adjusts the setting in Customization.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.applyAutoHideSettingsToIdleTimer()
+            }
+        }
+
         refreshAllPermissions()
         LumaLogger.log("[Luma] start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
@@ -312,7 +351,7 @@ final class CompanionManager: ObservableObject {
                 if !self.isOverlayVisible {
                     self.overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                     self.isOverlayVisible = true
-                    self.idleTimer.start()
+                    self.applyAutoHideSettingsToIdleTimer()
                 }
                 self.idleTimer.reset()
                 LumaFloatingInputWindowManager.shared.showOrRefocus()
@@ -331,7 +370,7 @@ final class CompanionManager: ObservableObject {
                 LumaLogger.log("[LumaIdleTimer] Skipping hide — voice state is \(self.voiceState)")
                 self.idleTimer.reset()
             case .idle:
-                LumaLogger.log("[LumaIdleTimer] 5min idle — hiding Luma UI")
+                LumaLogger.log("[LumaIdleTimer] Idle timeout reached — hiding Luma UI")
                 self.overlayWindowManager.hideOverlay()
                 self.isOverlayVisible = false
                 // Floating text input is a separate user-triggered tool — never hidden by the idle timer.
@@ -390,7 +429,7 @@ final class CompanionManager: ObservableObject {
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
-            idleTimer.start()
+            applyAutoHideSettingsToIdleTimer()
         }
 
         // Listen for the pointAt notification from CursorGuide / LumaImageProcessingEngine.
@@ -565,8 +604,40 @@ final class CompanionManager: ObservableObject {
         detectedElementBubbleText = nil
     }
 
+    // MARK: - Auto-Hide Settings
+
+    /// Reads the user's auto-hide preferences from UserDefaults and applies them to the
+    /// idle timer. Called on launch, when the overlay is shown, and whenever UserDefaults
+    /// changes (so Customization setting changes take effect immediately).
+    ///
+    /// Auto-hide disabled or "Never" interval → timer is stopped.
+    /// Any real interval → timer interval is updated and timer is (re)started if the
+    /// overlay is currently visible.
+    func applyAutoHideSettingsToIdleTimer() {
+        let isAutoHideEnabled = UserDefaults.standard.bool(forKey: LumaAutoHideInterval.enabledUserDefaultsKey)
+        let rawIntervalSeconds = UserDefaults.standard.double(forKey: LumaAutoHideInterval.intervalUserDefaultsKey)
+        let selectedInterval = LumaAutoHideInterval.from(storedSeconds: rawIntervalSeconds)
+
+        guard isAutoHideEnabled && selectedInterval != .never else {
+            // Auto-hide is off or the user chose "Never" — keep the timer dormant.
+            idleTimer.stop()
+            LumaLogger.log("[LumaIdleTimer] Auto-hide off or Never — timer stopped")
+            return
+        }
+
+        idleTimer.idleInterval = selectedInterval.rawValue
+        LumaLogger.log("[LumaIdleTimer] Interval updated to \(selectedInterval.displayName)")
+
+        // Only start the timer countdown when the overlay is actually visible.
+        // If it's hidden or suspended (onboarding), leave it alone.
+        if isOverlayVisible && !idleTimer.isSuspended {
+            idleTimer.start()
+        }
+    }
+
     func stop() {
         idleTimer.stop()
+        mouseWiggleDetector.stop()
         globalPushToTalkShortcutMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
@@ -771,7 +842,7 @@ final class CompanionManager: ObservableObject {
                 overlayWindowManager.hasShownOverlayBefore = true
                 overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                 isOverlayVisible = true
-                idleTimer.start()
+                applyAutoHideSettingsToIdleTimer()
             }
             // All permissions confirmed — stop polling to save energy
             accessibilityCheckTimer?.invalidate()
