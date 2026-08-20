@@ -1,3 +1,6 @@
+# SUPPORT FOR LUMA IS OFFICIALLY OVER!
+## It's been real, bye guys
+
 <div align="center">
 
 <img src="assets/1024-mac.png" alt="Luma/Click Logo" width="96" />
