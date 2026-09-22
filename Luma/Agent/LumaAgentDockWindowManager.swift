@@ -305,6 +305,7 @@ final class AgentBubbleWindow {
 
     init(
         session: AgentSession,
+        companionSystem: LumaCompanionSystem,
         initialOrigin: NSPoint,
         onDismiss: @escaping () -> Void,
         onRunSuggestedAction: @escaping (String) -> Void,
@@ -338,6 +339,7 @@ final class AgentBubbleWindow {
 
         let bubbleView = AgentBubbleRootView(
             session: session,
+            companionSystem: companionSystem,
             physicsState: physicsState,
             onDragStarted: { [weak self] in self?.handleDragStarted() },
             onDragUpdated: { [weak self] in self?.handleDragUpdated() },
@@ -464,15 +466,18 @@ final class LumaAgentDockWindowManager {
     private var onVoiceFollowUp: ((UUID) -> Void)?
     private var onSubmitTextFromDock: ((UUID, String) -> Void)?
     private var onVoiceToggle: ((UUID) -> Void)?
+    private var companionSystem: LumaCompanionSystem?
 
     func show(
         sessions: [AgentSession],
+        companionSystem: LumaCompanionSystem,
         onDismissAgent: @escaping (UUID) -> Void,
         onRunSuggestedAction: @escaping (UUID, String) -> Void,
         onVoiceFollowUp: @escaping (UUID) -> Void,
         onSubmitTextFromDock: @escaping (UUID, String) -> Void,
         onVoiceToggle: @escaping (UUID) -> Void
     ) {
+        self.companionSystem = companionSystem
         self.onDismissAgent = onDismissAgent
         self.onRunSuggestedAction = onRunSuggestedAction
         self.onVoiceFollowUp = onVoiceFollowUp
@@ -518,11 +523,13 @@ final class LumaAgentDockWindowManager {
         // Open windows for sessions that are new
         for session in sessions where bubbleWindows[session.id] == nil {
             guard let onDismissAgent, let onRunSuggestedAction,
-                  let onVoiceFollowUp, let onSubmitTextFromDock, let onVoiceToggle else { continue }
+                  let onVoiceFollowUp, let onSubmitTextFromDock, let onVoiceToggle,
+                  let companionSystem else { continue }
 
             let initialOrigin = defaultSpawnOriginForNewBubble(existingCount: bubbleWindows.count)
             let window = AgentBubbleWindow(
                 session: session,
+                companionSystem: companionSystem,
                 initialOrigin: initialOrigin,
                 onDismiss: {
                     onDismissAgent(session.id)
@@ -2513,6 +2520,7 @@ private struct MorphingAgentBubbleView: View {
 /// interference between adjacent bubble panels.
 private struct AgentBubbleRootView: View {
     @ObservedObject var session: AgentSession
+    @ObservedObject var companionSystem: LumaCompanionSystem
     @ObservedObject var physicsState: AgentBubblePhysicsState
 
     let onDragStarted: () -> Void
@@ -2611,7 +2619,11 @@ private struct AgentBubbleRootView: View {
                     // internal OrbStatusDot badge renders without clipping.
                     // Fades out as the card expands — at expansionProgress = 1 the orb
                     // is invisible and only the card content remains visible.
-                    AgentOrbView(session: session)
+                    LumaCompanionView(
+                        state: companionSystem.state,
+                        appearance: companionSystem.appearance,
+                        size: .compact
+                    )
                         .frame(width: effectiveOrbSize, height: effectiveOrbSize)
                         .opacity(Double(1 - expansionProgress))
                         .allowsHitTesting(false)

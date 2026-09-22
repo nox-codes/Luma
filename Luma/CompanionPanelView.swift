@@ -39,10 +39,6 @@ struct CompanionPanelView: View {
     @State private var tutorialPulseScale: CGFloat = 1.0
     @State private var tutorialPulseOpacity: Double = 0.6
 
-    // Status dot pulse animation state — driven by voiceState / walkthrough activity.
-    @State private var statusDotPulseScale: CGFloat = 1.0
-    @State private var statusDotPulseOpacity: Double = 1.0
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             panelHeader
@@ -202,24 +198,13 @@ struct CompanionPanelView: View {
     private var panelHeader: some View {
         HStack(spacing: 8) {
             // Status dot — 8pt square. Pulses when Luma is actively working.
-            Rectangle()
-                .fill(statusDotColor)
-                .frame(width: 8, height: 8)
-                .scaleEffect(statusDotPulseScale)
-                .opacity(statusDotPulseOpacity)
-                .onChange(of: statusDotShouldPulse) { shouldPulse in
-                    if shouldPulse {
-                        withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                            statusDotPulseScale = 0.88
-                            statusDotPulseOpacity = 0.55
-                        }
-                    } else {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            statusDotPulseScale = 1.0
-                            statusDotPulseOpacity = 1.0
-                        }
-                    }
-                }
+            LumaCompanionView(
+                state: companionManager.companionSystem.state,
+                appearance: companionManager.companionSystem.appearance,
+                size: .compact
+            )
+            .scaleEffect(0.48)
+            .frame(width: 29, height: 29)
 
             Text("Luma")
                 .font(.system(size: 14, weight: .semibold))
@@ -267,11 +252,6 @@ struct CompanionPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
-    }
-
-    /// True when the status dot should animate with the pulse breathing effect.
-    private var statusDotShouldPulse: Bool {
-        walkthroughEngine.isRunning || companionManager.voiceState != .idle
     }
 
     // MARK: - Permissions Copy
@@ -1017,22 +997,6 @@ struct CompanionPanelView: View {
             NoiseTextureView(opacity: 0.03)
         }
         .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
-    }
-
-    private var statusDotColor: Color {
-        if walkthroughEngine.isRunning {
-            // Blue pulsing dot while the walkthrough is executing
-            return DS.Colors.accentText
-        }
-        if !companionManager.isOverlayVisible {
-            return DS.Colors.success
-        }
-        switch companionManager.voiceState {
-        case .idle:
-            return DS.Colors.success
-        case .listening, .processing, .responding:
-            return DS.Colors.accentText
-        }
     }
 
     private var statusText: String {

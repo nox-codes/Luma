@@ -194,7 +194,7 @@ struct SettingsPanelView: View {
         [
             ("HEYCLICKY", [.general, .voice, .microphone, .dictation, .shortcuts, .cursor]),
             ("WORK", [.agents, .integrations]),
-            ("ADVANCED", [.account, .api, .model, .customization, .maintenance])
+            ("ADVANCED", [.account, .api, .model, .character, .maintenance])
         ]
     }
 
@@ -239,8 +239,8 @@ struct SettingsPanelView: View {
             APIProfilesTabView(profileManager: profileManager)
         case .model:
             ModelTabView(profileManager: profileManager)
-        case .customization:
-            CustomizationTabView()
+        case .character:
+            CharacterTabView(companionSystem: companionManager.companionSystem)
         case .maintenance:
             GeneralTabView(
                 pinManager: pinManager,
@@ -312,7 +312,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case account
     case api
     case model
-    case customization
+    case character
     case maintenance
 
     var id: String { rawValue }
@@ -330,7 +330,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .account:       return "Account"
         case .api:           return "API Profiles"
         case .model:         return "Models"
-        case .customization: return "Customization"
+        case .character:     return "Character"
         case .maintenance:   return "Maintenance"
         }
     }
@@ -348,7 +348,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .account:       return "person.circle"
         case .api:           return "key.horizontal"
         case .model:         return "cpu"
-        case .customization: return "paintpalette"
+        case .character:     return "face.smiling"
         case .maintenance:   return "wrench.and.screwdriver"
         }
     }
@@ -377,8 +377,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
             return "Configure API providers and connection profiles."
         case .model:
             return "Choose the active model for companion responses."
-        case .customization:
-            return "Choose accent color and agent bubble appearance."
+        case .character:
+            return "Choose Luma's character, presence, and motion."
         case .maintenance:
             return "Logs, memory, history, PIN, and reset actions."
         }
@@ -878,7 +878,7 @@ private struct CursorSettingsTabView: View {
                     )
                 }
 
-                Text("Cursor color, shape, auto-hide timing, and bubble appearance are available under Advanced → Customization.")
+                Text("Cursor color, shape, and auto-hide timing are available under Advanced → Character.")
                     .font(.system(size: 12))
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1783,12 +1783,14 @@ private struct ModelTabView: View {
     }
 }
 
-// MARK: - Tab: Customization
+// MARK: - Tab: Character
 
-/// Accent theme picker + agent bubble style and behavior sliders.
-/// Consolidated from GeneralTabView (accent) and AgentModeTabView (bubble).
+/// Accent theme, preserved companion behavior controls, and the unified
+/// state-aware character editor.
 @MainActor
-private struct CustomizationTabView: View {
+private struct CharacterTabView: View {
+
+    @ObservedObject var companionSystem: LumaCompanionSystem
 
     @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeRaw: String = LumaAccentTheme.white.rawValue
     @StateObject private var floatingStyleManager = FloatingInputStyleManager.shared
@@ -1804,7 +1806,7 @@ private struct CustomizationTabView: View {
                 Divider()
                 floatingInputStyleSection
                 Divider()
-                BubbleAppearanceSectionView()
+                LumaCharacterEditorView(system: companionSystem)
             }
             .padding(DS.Spacing.xl)
         }

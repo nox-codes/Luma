@@ -49,6 +49,10 @@ struct LumaCompletedTask {
 
 @MainActor
 final class CompanionManager: ObservableObject {
+    /// Single presentation-state boundary shared by the workspace, panel,
+    /// dock, and Character settings preview.
+    let companionSystem = LumaCompanionSystem()
+
     @Published private(set) var voiceState: CompanionVoiceState = .idle {
         didSet {
             // Any transition into an active state resets the idle countdown so Luma
@@ -59,6 +63,7 @@ final class CompanionManager: ObservableObject {
             case .idle:
                 break
             }
+            syncCompanionStateFromRuntime()
         }
     }
     @Published private(set) var lastTranscript: String?
@@ -1953,6 +1958,7 @@ final class CompanionManager: ObservableObject {
 
         agentSessions.append(session)
         activeAgentSessionID = session.id
+        companionSystem.setActiveSession(session.id)
         // Spawning an agent counts as an interaction — reset the 30-second idle countdown.
         idleTimer.reset()
 
@@ -1980,6 +1986,8 @@ final class CompanionManager: ObservableObject {
             activeAgentSessionID = agentSessions.first?.id
         }
 
+        companionSystem.setActiveSession(activeAgentSessionID)
+        syncCompanionStateFromRuntime()
         updateAgentDock()
         LumaLogger.log("[Luma] Dismissed agent session: \(id)")
     }
@@ -1991,6 +1999,7 @@ final class CompanionManager: ObservableObject {
         session.$status
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.syncCompanionStateFromRuntime()
                 self?.updateAgentDock()
             }
             .store(in: &cancellables)
@@ -1998,6 +2007,7 @@ final class CompanionManager: ObservableObject {
         session.$entries
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.syncCompanionStateFromRuntime()
                 self?.updateAgentDock()
             }
             .store(in: &cancellables)
@@ -2008,6 +2018,8 @@ final class CompanionManager: ObservableObject {
     func selectAgentSession(_ id: UUID) {
         guard agentSessions.contains(where: { $0.id == id }) else { return }
         activeAgentSessionID = id
+        companionSystem.setActiveSession(id)
+        syncCompanionStateFromRuntime()
     }
 
     func cycleActiveAgent() {
@@ -2015,11 +2027,74 @@ final class CompanionManager: ObservableObject {
         guard let currentIndex = agentSessions.firstIndex(where: { $0.id == currentID }) else { return }
         let nextIndex = (currentIndex + 1) % agentSessions.count
         activeAgentSessionID = agentSessions[nextIndex].id
+        companionSystem.setActiveSession(agentSessions[nextIndex].id)
+        syncCompanionStateFromRuntime()
     }
 
     func switchToAgentAtIndex(_ index: Int) {
         guard index >= 0, index < agentSessions.count else { return }
         activeAgentSessionID = agentSessions[index].id
+        companionSystem.setActiveSession(agentSessions[index].id)
+        syncCompanionStateFromRuntime()
+    }
+
+    /// Converts existing voice/session lifecycles into the presentation contract.
+    /// This is intentionally one-way: the companion never executes or authorizes
+    /// an action, it only explains what the trusted runtime is doing.
+    private func syncCompanionStateFromRuntime() {
+        guard let activeID = activeAgentSessionID,
+              let session = agentSessions.first(where: { $0.id == activeID }) else {
+            syncCompanionVoiceState()
+            return
+        }
+
+        companionSystem.setActiveSession(activeID)
+
+        switch session.status {
+        case .starting:
+            companionSystem.send(.thinking, sessionID: activeID)
+        case .running:
+            companionSystem.send(.working(companionProgress(for: session)), sessionID: activeID)
+        case .failed(let message):
+            companionSystem.send(.failed(message: message), sessionID: activeID)
+        case .stopped:
+            if session.taskSteps.isEmpty {
+                syncCompanionVoiceState()
+            } else {
+                companionSystem.send(.paused(reason: "The agent is stopped. Resume when you are ready."), sessionID: activeID)
+            }
+        case .ready:
+            if !session.taskSteps.isEmpty || session.latestResponseCard != nil {
+                companionSystem.send(.success, sessionID: activeID)
+            } else {
+                syncCompanionVoiceState()
+            }
+        }
+    }
+
+    private func syncCompanionVoiceState() {
+        switch voiceState {
+        case .idle:
+            companionSystem.send(.idle)
+        case .listening:
+            companionSystem.send(.listening)
+        case .processing:
+            companionSystem.send(.thinking)
+        case .responding:
+            companionSystem.send(.working(nil))
+        }
+    }
+
+    private func companionProgress(for session: AgentSession) -> CompanionProgress? {
+        guard !session.taskSteps.isEmpty else { return nil }
+        let completed = session.taskSteps.filter { $0.state == .completed }.count
+        let currentLabel = session.taskSteps.last(where: { $0.state == .inProgress })?.label
+            ?? session.taskSteps.last?.label
+        return CompanionProgress(
+            completed: completed,
+            total: session.taskSteps.count,
+            label: currentLabel
+        )
     }
 
     func submitAgentPromptFromUI(_ prompt: String) {
@@ -2046,6 +2121,7 @@ final class CompanionManager: ObservableObject {
         } else {
             agentDockManager.show(
                 sessions: agentSessions,
+                companionSystem: companionSystem,
                 onDismissAgent: { [weak self] sessionID in
                     Task { await self?.dismissAgentSession(id: sessionID) }
                 },

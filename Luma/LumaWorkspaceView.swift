@@ -67,11 +67,13 @@ struct LumaWorkspaceView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
-                Image(systemName: "cursorarrow.motionlines.click")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(DS.Colors.accentText)
-                    .frame(width: 26, height: 26)
-                    .background(Rectangle().fill(DS.Colors.accentText.opacity(0.12)))
+                LumaCompanionView(
+                    state: companionManager.companionSystem.state,
+                    appearance: companionManager.companionSystem.appearance,
+                    size: .compact
+                )
+                .scaleEffect(0.42)
+                .frame(width: 28, height: 28)
 
                 Text("Luma")
                     .font(.system(size: 15, weight: .bold))
@@ -189,6 +191,14 @@ struct LumaWorkspaceView: View {
 
     private func workspaceHeader(for session: AgentSession) -> some View {
         HStack(spacing: 10) {
+            LumaCompanionView(
+                state: companionManager.companionSystem.state,
+                appearance: companionManager.companionSystem.appearance,
+                size: .compact
+            )
+            .scaleEffect(0.46)
+            .frame(width: 30, height: 30)
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
                     .font(.system(size: 15, weight: .bold))
@@ -266,15 +276,18 @@ struct LumaWorkspaceView: View {
 
     private var emptyWorkspaceState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 26, weight: .medium))
-                .foregroundColor(DS.Colors.accentText)
+            LumaCompanionView(
+                state: companionManager.companionSystem.state,
+                appearance: companionManager.companionSystem.appearance,
+                size: .large
+            )
+            .padding(.bottom, 6)
 
-            Text("Start a Luma conversation")
+            Text("What are we working on?")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(DS.Colors.textPrimary)
 
-            Text("Create a session to inspect, explain, edit, research, or automate work on your Mac.")
+            Text("Start a conversation to inspect, explain, edit, research, or automate work on your Mac.")
                 .font(.system(size: 12))
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)

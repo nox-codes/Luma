@@ -53,6 +53,11 @@
 			path = Luma;
 			sourceTree = "<group>";
 		};
+		901B06B72F874FFD00AE9ACA /* LumaTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LumaTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				901B06B62F874FFD00AE9ACA /* Luma */,
+				901B06B72F874FFD00AE9ACA /* LumaTests */,
 				28F22CC02F56440300A0FC59 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -140,7 +146,10 @@
 			dependencies = (
 				28F22CCE2F56440300A0FC59 /* PBXTargetDependency */,
 			);
-			name = LumaTests;
+				fileSystemSynchronizedGroups = (
+					901B06B72F874FFD00AE9ACA /* LumaTests */,
+				);
+				name = LumaTests;
 			packageProductDependencies = (
 			);
 			productName = LumaTests;
