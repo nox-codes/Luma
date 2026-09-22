@@ -6,6 +6,7 @@
 //  desktop presence. These values deliberately do not know how an agent acts.
 //
 
+import Combine
 import SwiftUI
 
 enum LumaCompanionState: Equatable {
