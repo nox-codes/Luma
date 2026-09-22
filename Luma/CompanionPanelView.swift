@@ -227,6 +227,19 @@ struct CompanionPanelView: View {
 
             Spacer()
 
+            Button(action: {
+                NotificationCenter.default.post(name: .lumaOpenWorkspace, object: nil)
+            }) {
+                Image(systemName: "rectangle.split.3x1")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .frame(width: 24, height: 24)
+                    .background(Rectangle().fill(DS.Colors.surface3))
+            }
+            .buttonStyle(.plain)
+            .help("Open Luma workspace")
+            .glowOnHover()
+
             // Status badge — surface3 background, tertiary text, monospace uppercase
             Text(statusText.uppercased())
                 .font(.system(size: 9, weight: .medium, design: .monospaced))

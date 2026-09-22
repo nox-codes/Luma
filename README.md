@@ -1,6 +1,3 @@
-# SUPPORT FOR LUMA IS OFFICIALLY OVER!
-## It's been real, bye guys
-
 <div align="center">
 
 <img src="assets/1024-mac.png" alt="Luma/Click Logo" width="96" />
@@ -20,13 +17,15 @@ Watches your screen, guides you step by step, and teaches you anything — right
 &nbsp;
 ![License](https://img.shields.io/badge/License-MIT-black)
 &nbsp;
-![Status](https://img.shields.io/badge/Status-v0.5.1-blue)
+![Status](https://img.shields.io/badge/Status-Actively%20maintained-blue)
 <!--Going to add Actual demo gif soon-->
 <!--<img src="assets/1024-mac.png" alt="Luma/Click Logo" width="480" />-->
 
 </div>
 
 ---
+
+> **Active development:** Luma is actively maintained. Current work focuses on the native HeyClicky-style workspace, VisualAutomationKernel reliability, and production hardening.
 
 ## Install Guide
 
@@ -176,6 +175,8 @@ The wizard walks you through 5 quick steps:
 
 After the wizard finishes, Luma disappears into your **menu bar** (top-right area of your screen). Click the icon there to open the companion panel anytime.
 
+The companion panel remains Luma's quick, menu-bar-first entry point. For longer agent tasks, click the workspace button in the panel to open the full native workspace with persistent conversations, live transcripts, task progress, and follow-up actions.
+
 ---
 
 ### You're set up. Here's how to use it.
@@ -183,6 +184,7 @@ After the wizard finishes, Luma disappears into your **menu bar** (top-right are
 - **Talk to Luma** — Hold `Ctrl + Option`, speak your request, release. Luma responds with voice and a floating bubble near your cursor.
 - **Start a walkthrough** — Say something like "open Safari and go to Google". Luma will guide you step by step.
 - **Spawn an agent** — Say "create an agent to research X" or press `Ctrl + Cmd + N`. The agent runs in the background while you keep working.
+- **Open the workspace** — Click the workspace button in the companion panel to see persistent conversations, live transcripts, task progress, and follow-up actions in one window.
 - **Open settings** — Click the menu bar icon → Settings (or enter your PIN if you set one).
 
 ---
@@ -450,6 +452,8 @@ Luma/
 │   ├── CompanionBubbleWindow.swift          # Cursor-following floating bubble
 │   ├── OnboardingWizardView.swift           # 5-step first launch wizard
 │   ├── SettingsPanelView.swift              # Tabbed settings (Account, Profiles, Model, General)
+│   ├── LumaWorkspaceView.swift             # Persistent agent conversation workspace
+│   ├── LumaWorkspaceWindowManager.swift    # Resizable workspace window lifecycle
 │   └── PINEntryView.swift                   # Numeric PIN keypad with shake animation
 │
 ├── Overlay/

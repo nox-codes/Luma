@@ -32,6 +32,7 @@ struct LumaApp: App {
 final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPanelManager: MenuBarPanelManager?
     private let companionManager = CompanionManager()
+    private var openWorkspaceObserver: NSObjectProtocol?
     private var sparkleUpdaterController: SPUStandardUpdaterController?
     /// Held strongly because SPUStandardUpdaterController stores the delegate weakly.
     private var sparkleActivationDelegate: SparkleActivationDelegate?
@@ -60,6 +61,16 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         LumaAnalytics.trackAppOpened()
 
         menuBarPanelManager = MenuBarPanelManager(companionManager: companionManager)
+        openWorkspaceObserver = NotificationCenter.default.addObserver(
+            forName: .lumaOpenWorkspace,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                LumaWorkspaceWindowManager.shared.show(companionManager: self.companionManager)
+            }
+        }
         companionManager.start()
         // Auto-open the panel if the user still needs to do something:
         // either they haven't onboarded yet, or permissions were revoked.
@@ -72,6 +83,9 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let openWorkspaceObserver {
+            NotificationCenter.default.removeObserver(openWorkspaceObserver)
+        }
         companionManager.stop()
     }
 
