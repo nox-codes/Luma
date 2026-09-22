@@ -115,7 +115,7 @@ struct CompanionPanelView: View {
                             companionManager.submitAgentPromptFromUI(action)
                         },
                         showSettings: {
-                            LumaSettingsWindowManager.shared.showSettingsWindow()
+                            LumaSettingsWindowManager.shared.showSettingsWindow(companionManager: companionManager)
                         },
                         isRecordingVoice: companionManager.agentVoiceRecordingSessionID == companionManager.activeAgentSessionID,
                         onVoiceToggle: {
@@ -190,7 +190,7 @@ struct CompanionPanelView: View {
         .sheet(isPresented: $showPINEntryForSettings) {
             PINEntryView(mode: .verify, title: "Enter PIN to open Settings") {
                 showPINEntryForSettings = false
-                LumaSettingsWindowManager.shared.showSettingsWindow()
+                LumaSettingsWindowManager.shared.showSettingsWindow(companionManager: companionManager)
             } onCancel: {
                 showPINEntryForSettings = false
             }
@@ -1002,7 +1002,7 @@ struct CompanionPanelView: View {
         if PINManager.shared.hasPIN {
             showPINEntryForSettings = true
         } else {
-            LumaSettingsWindowManager.shared.showSettingsWindow()
+            LumaSettingsWindowManager.shared.showSettingsWindow(companionManager: companionManager)
         }
     }
 

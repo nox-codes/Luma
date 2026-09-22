@@ -15,13 +15,15 @@ extension Notification.Name {
 }
 
 @MainActor
-final class LumaWorkspaceWindowManager {
+final class LumaWorkspaceWindowManager: NSObject {
     static let shared = LumaWorkspaceWindowManager()
 
     private var workspaceWindow: NSWindow?
     private var hostingController: NSHostingController<LumaWorkspaceView>?
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func show(companionManager: CompanionManager) {
         // The workspace becomes the primary interaction surface, so dismiss the
@@ -67,7 +69,7 @@ final class LumaWorkspaceWindowManager {
 
     func hide() {
         workspaceWindow?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
+        restoreActivationPolicy()
     }
 
     func toggle(companionManager: CompanionManager) {
@@ -82,6 +84,11 @@ final class LumaWorkspaceWindowManager {
 extension LumaWorkspaceWindowManager: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         workspaceWindow?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
+        restoreActivationPolicy()
+    }
+
+    private func restoreActivationPolicy() {
+        let shouldShowInDock = UserDefaults.standard.bool(forKey: "luma_show_in_dock")
+        NSApp.setActivationPolicy(shouldShowInDock ? .regular : .accessory)
     }
 }

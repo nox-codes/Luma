@@ -85,6 +85,11 @@ final class LumaUpdateManager: ObservableObject {
         LumaLogger.log("[LumaUpdate] Dismissed update \(versionTag)")
     }
 
+    /// Runs an immediate release check for the Settings General surface.
+    func checkForUpdateNow() async {
+        await checkForUpdate()
+    }
+
     // MARK: - Network check
 
     private func checkForUpdate() async {

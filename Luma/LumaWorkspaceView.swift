@@ -142,7 +142,7 @@ struct LumaWorkspaceView: View {
                     LumaMemoryWindowManager.shared.showMemoryWindow()
                 }
                 workspaceFooterButton(systemName: "gearshape", helpText: "Settings") {
-                    LumaSettingsWindowManager.shared.showSettingsWindow()
+                    LumaSettingsWindowManager.shared.showSettingsWindow(companionManager: companionManager)
                 }
 
                 Spacer()

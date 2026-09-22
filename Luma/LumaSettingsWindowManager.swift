@@ -26,19 +26,25 @@ final class LumaSettingsWindowManager {
     static let shared = LumaSettingsWindowManager()
 
     private var settingsWindow: NSWindow?
-    private let windowSize = NSSize(width: 860, height: 580)
-    private let minimumWindowSize = NSSize(width: 760, height: 500)
+    private var settingsHostingView: NSHostingView<AnyView>?
+    private var settingsWindowCloseObserver: NSObjectProtocol?
+    private let windowSize = NSSize(width: 980, height: 680)
+    private let minimumWindowSize = NSSize(width: 900, height: 620)
 
     private init() {}
 
-    func showSettingsWindow() {
+    func showSettingsWindow(companionManager: CompanionManager) {
         // Dismiss the menu bar panel so it's not visible behind the settings window
         NotificationCenter.default.post(name: .lumaDismissPanel, object: nil)
 
         if settingsWindow == nil {
-            settingsWindow = makeSettingsWindow()
-        } else if let hostingView = settingsWindow?.contentView as? NSHostingView<SettingsPanelView> {
-            hostingView.rootView = SettingsPanelView()
+            settingsWindow = makeSettingsWindow(companionManager: companionManager)
+        } else if let hostingView = settingsHostingView {
+            hostingView.rootView = AnyView(
+                SettingsPanelView(companionManager: companionManager)
+                    .preferredColorScheme(.dark)
+                    .shadow(color: .black.opacity(0.60), radius: 36, y: 14)
+            )
         }
 
         guard let settingsWindow else { return }
@@ -55,51 +61,58 @@ final class LumaSettingsWindowManager {
         // Return to accessory (menu-bar-only) mode when the settings window closes.
         // We observe windowWillClose so the dock icon disappears as soon as the user
         // dismisses the window — before the next event loop tick.
-        NotificationCenter.default.addObserver(
+        if let settingsWindowCloseObserver {
+            NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
+        }
+
+        settingsWindowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: settingsWindow,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             // Hop back to the main actor to touch @MainActor-isolated state.
-            Task { @MainActor in
-                NSApp.setActivationPolicy(.accessory)
+            Task { @MainActor [weak self] in
+                self?.restoreActivationPolicy()
             }
         }
     }
 
     func hideSettingsWindow() {
         settingsWindow?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
+        restoreActivationPolicy()
     }
 
-    private func makeSettingsWindow() -> NSWindow {
+    private func restoreActivationPolicy() {
+        let shouldShowInDock = UserDefaults.standard.bool(forKey: "luma_show_in_dock")
+        NSApp.setActivationPolicy(shouldShowInDock ? .regular : .accessory)
+    }
+
+    private func makeSettingsWindow(companionManager: CompanionManager) -> NSWindow {
         let settingsWindow = KeyAcceptingWindow(
             contentRect: NSRect(origin: .zero, size: windowSize),
-            // Borderless: no macOS titlebar — we draw our own close button inside SwiftUI.
-            // KeyAcceptingWindow overrides canBecomeKey/canBecomeMain so all interactive
-            // elements (buttons, text fields, pickers) receive mouse and keyboard events.
-            styleMask: [.borderless, .resizable],
+            // Keep the native titlebar and traffic lights so settings feels like a
+            // normal macOS surface while the SwiftUI body owns the app navigation.
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        settingsWindow.title = "Luma"
+        settingsWindow.title = "Luma Settings"
+        settingsWindow.titleVisibility = .hidden
+        settingsWindow.titlebarAppearsTransparent = true
         settingsWindow.minSize = minimumWindowSize
         settingsWindow.isReleasedWhenClosed = false
         settingsWindow.collectionBehavior.insert(.moveToActiveSpace)
         settingsWindow.center()
-        // Transparent so the rounded SwiftUI view clips cleanly without a square background.
+        // Transparent so the SwiftUI body supplies the dark surface below the titlebar.
         settingsWindow.isOpaque = false
         settingsWindow.backgroundColor = .clear
         settingsWindow.hasShadow = true
-        // isMovableByWindowBackground is intentionally NOT set — the SwiftUI
-        // WindowDragHandle view in the top bar handles dragging instead, so
-        // interactive controls (toggles, sliders, text fields) are never swallowed
-        // by the window-level drag recogniser.
-
-        let hostingView = NSHostingView(
-            rootView: SettingsPanelView()
+        let hostingView = NSHostingView<AnyView>(
+            rootView: AnyView(
+                SettingsPanelView(companionManager: companionManager)
                 .preferredColorScheme(.dark)
                 .shadow(color: .black.opacity(0.60), radius: 36, y: 14)
+            )
         )
         hostingView.frame = NSRect(origin: .zero, size: windowSize)
         hostingView.autoresizingMask = [.width, .height]
@@ -108,6 +121,7 @@ final class LumaSettingsWindowManager {
         hostingView.layer?.masksToBounds = true
         hostingView.layer?.backgroundColor = CGColor.clear
 
+        settingsHostingView = hostingView
         settingsWindow.contentView = hostingView
         return settingsWindow
     }

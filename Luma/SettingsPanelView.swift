@@ -2,11 +2,15 @@
 //  SettingsPanelView.swift
 //  leanring-buddy
 //
-//  4-tab settings panel presented as a sheet from the menu bar panel.
-//  Tabs: Account, API Profiles, Model, General.
+//  Grouped settings workspace presented from the menu bar panel or workspace.
+//  The existing account, provider, model, PIN, history, and memory controls
+//  remain available behind the new HeyClicky-style navigation shell.
 //
 
 import AVFoundation
+import AppKit
+import ApplicationServices
+import Combine
 import SwiftUI
 
 // MARK: - SettingsPanelView
@@ -16,8 +20,11 @@ struct SettingsPanelView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    // Triggers re-render whenever the user changes the accent theme, so the Done
-    // button and sidebar selected states immediately reflect the new accent color.
+    @ObservedObject var companionManager: CompanionManager
+    @ObservedObject private var dictationManager: BuddyDictationManager
+
+    // Triggers re-render whenever the user changes the accent theme, so selected
+    // navigation states immediately reflect the new accent color.
     @AppStorage(LumaAccentTheme.userDefaultsKey) private var accentThemeID: String = LumaAccentTheme.white.rawValue
 
     // Observe singletons so changes in each tab update the UI immediately.
@@ -26,52 +33,38 @@ struct SettingsPanelView: View {
     @StateObject private var pinManager    = PINManager.shared
 
     /// Which tab is currently selected.
-    @State private var selectedTab: SettingsTab = .account
+    @State private var selectedTab: SettingsTab = .general
+
+    init(companionManager: CompanionManager) {
+        self.companionManager = companionManager
+        self._dictationManager = ObservedObject(wrappedValue: companionManager.buddyDictationManager)
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            settingsSidebar
+        VStack(spacing: 0) {
+            settingsToolbar
 
-            VStack(spacing: 0) {
-                // Top bar — Done button sits tight to the right edge with DS accent styling.
-                HStack {
-                    Spacer()
-                    Button("Done") {
-                        closeSettingsPanel()
-                    }
-                    .keyboardShortcut(.return)
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(DS.Colors.textOnAccent)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(Rectangle().fill(DS.Colors.accent))
-                    .onHover { hovering in
-                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
-                }
-                .padding(.leading, 20)
-                .padding(.trailing, 12)
-                .padding(.vertical, 10)
-                // WindowDragHandle sits behind all controls so clicking the empty
-                // area of the top bar drags the window, while the Done button and
-                // any other interactive views above it still fire normally.
-                .background(WindowDragHandle())
+            HStack(spacing: 0) {
+                settingsSidebar
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        settingsHeader
-                        selectedTabContent
-                    }
-                    .frame(maxWidth: 700, alignment: .leading)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 22)
+                Rectangle()
+                    .fill(DS.Colors.borderSubtle)
+                    .frame(width: 1)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    settingsHeader
+                        .padding(.horizontal, 32)
+                        .padding(.top, 24)
+                        .padding(.bottom, 18)
+
+                    selectedTabContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(DS.Colors.background)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DS.Colors.background)
         }
-        .frame(minWidth: 780, minHeight: 560)
+        .frame(minWidth: 900, minHeight: 620)
         .background(DS.Colors.background)
         .focusEffectDisabled()
     }
@@ -81,24 +74,128 @@ struct SettingsPanelView: View {
         dismiss()
     }
 
-    private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Title row — no close button (Done is in the top-right of the content area)
-            Text("Luma Settings")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(DS.Colors.textPrimary)
-                .padding(.horizontal, 11)
-                .padding(.top, 20)
-                .padding(.bottom, 10)
-
-            ForEach(SettingsTab.allCases) { tab in
-                settingsSidebarButton(tab: tab)
-            }
+    private var settingsToolbar: some View {
+        HStack(spacing: 8) {
             Spacer()
+
+            workspaceIconButton(
+                systemName: "arrow.up.left.and.arrow.down.right",
+                helpText: "Toggle full screen"
+            ) {
+                NSApp.keyWindow?.toggleFullScreen(nil)
+            }
+
+            workspaceIconButton(
+                systemName: "xmark",
+                helpText: "Close settings",
+                action: closeSettingsPanel
+            )
         }
-        .padding(.horizontal, 10)
-        .frame(width: 220)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(DS.Colors.background)
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                closeSettingsPanel()
+            } label: {
+                Label("Back", systemImage: "chevron.left")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(DS.Colors.surface2))
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+            .padding(.bottom, 12)
+
+            Text("Settings")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(DS.Colors.textPrimary)
+                .padding(.bottom, 14)
+
+            accountIdentityCard
+                .padding(.bottom, 18)
+
+            ForEach(settingsGroups, id: \.title) { group in
+                Text(group.title)
+                    .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .tracking(0.8)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+
+                ForEach(group.tabs) { tab in
+                    settingsSidebarButton(tab: tab)
+                }
+
+                if group.title != settingsGroups.last?.title {
+                    Spacer().frame(height: 15)
+                }
+            }
+
+            Spacer()
+
+            Text("Luma v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundColor(DS.Colors.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 12)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .frame(width: 248, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(DS.Colors.surface2)
+    }
+
+    private var accountIdentityCard: some View {
+        HStack(spacing: 10) {
+            if let account = accountManager.currentAccount {
+                LumaAvatarView(initials: account.avatarInitials, size: 34)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(account.displayName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(DS.Colors.textPrimary)
+                        .lineLimit(1)
+
+                    Text(account.username)
+                        .font(.system(size: 10))
+                        .foregroundColor(DS.Colors.textTertiary)
+                        .lineLimit(1)
+                }
+            } else {
+                LumaAvatarView(initials: "LU", size: 34)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Local account")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(DS.Colors.textPrimary)
+                    Text("Complete onboarding to edit")
+                        .font(.system(size: 10))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(DS.Colors.surface1))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(DS.Colors.borderSubtle, lineWidth: 0.5))
+    }
+
+    private var settingsGroups: [(title: String, tabs: [SettingsTab])] {
+        [
+            ("HEYCLICKY", [.general, .voice, .microphone, .dictation, .shortcuts, .cursor]),
+            ("WORK", [.agents, .integrations]),
+            ("ADVANCED", [.account, .api, .model, .customization, .maintenance])
+        ]
     }
 
     private var settingsHeader: some View {
@@ -116,6 +213,22 @@ struct SettingsPanelView: View {
     @ViewBuilder
     private var selectedTabContent: some View {
         switch selectedTab {
+        case .general:
+            GeneralWorkspaceTabView(updateManager: LumaUpdateManager.shared)
+        case .voice:
+            VoiceSettingsTabView()
+        case .microphone:
+            SettingsPermissionTabView(permission: .microphone, companionManager: companionManager)
+        case .dictation:
+            DictationSettingsTabView(dictationManager: dictationManager)
+        case .shortcuts:
+            ShortcutsSettingsTabView()
+        case .cursor:
+            CursorSettingsTabView(companionManager: companionManager)
+        case .agents:
+            AgentModeTabView()
+        case .integrations:
+            APIProfilesTabView(profileManager: profileManager)
         case .account:
             AccountTabView(
                 accountManager: accountManager,
@@ -126,13 +239,9 @@ struct SettingsPanelView: View {
             APIProfilesTabView(profileManager: profileManager)
         case .model:
             ModelTabView(profileManager: profileManager)
-        case .voice:
-            VoiceSettingsTabView()
-        case .agents:
-            AgentModeTabView()
         case .customization:
             CustomizationTabView()
-        case .general:
+        case .maintenance:
             GeneralTabView(
                 pinManager: pinManager,
                 accountManager: accountManager,
@@ -161,18 +270,364 @@ struct SettingsPanelView: View {
                 Spacer()
             }
             .padding(.horizontal, 11)
-            .padding(.vertical, 10)
-            .background(
-                Rectangle()
-                    .fill(isSelected ? DS.Colors.accentSubtle : .clear)
-            )
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    Rectangle()
-                        .fill(DS.Colors.accent)
-                        .frame(width: 2)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 7).fill(isSelected ? DS.Colors.accentSubtle : .clear))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    private func workspaceIconButton(
+        systemName: String,
+        helpText: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .frame(width: 28, height: 26)
+        }
+        .buttonStyle(.plain)
+        .background(RoundedRectangle(cornerRadius: 7).fill(DS.Colors.surface2))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(DS.Colors.borderSubtle, lineWidth: 0.5))
+        .help(helpText)
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+private enum SettingsTab: String, CaseIterable, Identifiable {
+    case general
+    case voice
+    case microphone
+    case dictation
+    case shortcuts
+    case cursor
+    case agents
+    case integrations
+    case account
+    case api
+    case model
+    case customization
+    case maintenance
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general:       return "General"
+        case .voice:         return "Voice"
+        case .microphone:    return "Microphone"
+        case .dictation:     return "Dictation"
+        case .shortcuts:     return "Shortcuts"
+        case .cursor:        return "Cursor"
+        case .agents:        return "Agents"
+        case .integrations:  return "Integrations"
+        case .account:       return "Account"
+        case .api:           return "API Profiles"
+        case .model:         return "Models"
+        case .customization: return "Customization"
+        case .maintenance:   return "Maintenance"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general:       return "gearshape"
+        case .voice:         return "waveform"
+        case .microphone:    return "mic"
+        case .dictation:     return "character.cursor.ibeam"
+        case .shortcuts:     return "command"
+        case .cursor:        return "cursorarrow"
+        case .agents:        return "circle.grid.2x2"
+        case .integrations:  return "puzzlepiece.extension"
+        case .account:       return "person.circle"
+        case .api:           return "key.horizontal"
+        case .model:         return "cpu"
+        case .customization: return "paintpalette"
+        case .maintenance:   return "wrench.and.screwdriver"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .general:
+            return "How Luma behaves on your Mac."
+        case .voice:
+            return "Adjust speech voice, pitch, rate, and volume."
+        case .microphone:
+            return "Manage microphone access for voice input."
+        case .dictation:
+            return "Choose how Luma turns speech into text."
+        case .shortcuts:
+            return "See the keyboard shortcuts that control Luma."
+        case .cursor:
+            return "Control the companion cursor and its visibility."
+        case .agents:
+            return "Set agent limits, defaults, and agent-mode options."
+        case .integrations:
+            return "Connect providers and manage API profiles."
+        case .account:
+            return "Manage your local identity and reset behavior."
+        case .api:
+            return "Configure API providers and connection profiles."
+        case .model:
+            return "Choose the active model for companion responses."
+        case .customization:
+            return "Choose accent color and agent bubble appearance."
+        case .maintenance:
+            return "Logs, memory, history, PIN, and reset actions."
+        }
+    }
+}
+
+// MARK: - Captured Settings Surfaces
+
+@MainActor
+private struct GeneralWorkspaceTabView: View {
+
+    @ObservedObject var updateManager: LumaUpdateManager
+
+    @AppStorage("luma_show_in_dock") private var showInDock = false
+    @AppStorage("luma_show_in_screen_recordings") private var showInScreenRecordings = true
+    @State private var isCheckingForUpdate = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                settingsSectionLabel("BEHAVIOR")
+                SettingsSectionCard {
+                    SettingsToggleRow(
+                        title: "Show in Dock",
+                        subtitle: "Turn off to keep Luma menu-bar-only.",
+                        isOn: $showInDock
+                    )
+                    .onChange(of: showInDock) { shouldShowInDock in
+                        NSApp.setActivationPolicy(shouldShowInDock ? .regular : .accessory)
+                    }
+
+                    Divider().padding(.horizontal, 16)
+
+                    SettingsToggleRow(
+                        title: "Show in screen recordings",
+                        subtitle: "Let screen sharing and recording tools capture Luma.",
+                        isOn: $showInScreenRecordings
+                    )
+                    .onChange(of: showInScreenRecordings) { shouldShowInScreenRecordings in
+                        applyScreenRecordingVisibility(shouldShowInScreenRecordings)
+                    }
+                }
+
+                settingsSectionLabel("UPDATES")
+                SettingsSectionCard {
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("App updates")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(DS.Colors.textPrimary)
+                            Text(updateStatusText)
+                                .font(.system(size: 11))
+                                .foregroundColor(DS.Colors.textTertiary)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button {
+                            Task {
+                                isCheckingForUpdate = true
+                                await updateManager.checkForUpdateNow()
+                                isCheckingForUpdate = false
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isCheckingForUpdate {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Text(updateManager.availableUpdate == nil ? "Check for updates" : "Update available")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundColor(DS.Colors.textOnAccent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 7).fill(DS.Colors.accent))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isCheckingForUpdate)
+                        .onHover { isHovering in
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                    }
+                    .padding(16)
+
+                    Divider().padding(.horizontal, 16)
+
+                    SettingsActionRow(
+                        title: "What's new",
+                        subtitle: "See the latest changes shipping in Luma.",
+                        systemName: "arrow.up.right"
+                    ) {
+                        openURL("https://github.com/nox-codes/Luma/releases")
+                    }
+                }
+
+                settingsSectionLabel("COMMUNITY")
+                SettingsSectionCard {
+                    SettingsActionRow(
+                        title: "GitHub Discussions",
+                        subtitle: "Talk about ideas, workflows, and the roadmap.",
+                        systemName: "arrow.up.right"
+                    ) {
+                        openURL("https://github.com/nox-codes/Luma/discussions")
+                    }
+
+                    Divider().padding(.horizontal, 16)
+
+                    SettingsActionRow(
+                        title: "GitHub Issues",
+                        subtitle: "Share a reproducible problem with the project.",
+                        systemName: "arrow.up.right"
+                    ) {
+                        openURL("https://github.com/nox-codes/Luma/issues")
+                    }
+                }
+
+                settingsSectionLabel("SUPPORT")
+                SettingsSectionCard {
+                    SettingsActionRow(
+                        title: "Request a feature",
+                        subtitle: "Suggest the next thing Luma should learn.",
+                        systemName: "arrow.up.right"
+                    ) {
+                        openURL("https://github.com/nox-codes/Luma/issues/new?template=feature_request.md")
+                    }
+
+                    Divider().padding(.horizontal, 16)
+
+                    SettingsActionRow(
+                        title: "Report a bug",
+                        subtitle: "Include logs so the problem can actually be fixed.",
+                        systemName: "arrow.up.right"
+                    ) {
+                        openURL("https://github.com/nox-codes/Luma/issues/new?template=bug_report.md")
+                    }
                 }
             }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 28)
+        }
+        .onAppear {
+            applyScreenRecordingVisibility(showInScreenRecordings)
+        }
+    }
+
+    private var updateStatusText: String {
+        if let update = updateManager.availableUpdate {
+            return "Version \(update.version) is ready to download."
+        }
+
+        let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        return "You're on version \(currentVersion)."
+    }
+
+    private func settingsSectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .heavy, design: .monospaced))
+            .foregroundColor(DS.Colors.textTertiary)
+            .tracking(0.8)
+            .padding(.horizontal, 4)
+    }
+
+    private func applyScreenRecordingVisibility(_ shouldBeVisible: Bool) {
+        let sharingType: NSWindow.SharingType = shouldBeVisible ? .readWrite : .none
+        for window in NSApp.windows {
+            window.sharingType = sharingType
+        }
+    }
+
+    private func openURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+private struct SettingsSectionCard<Content: View>: View {
+
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+        }
+        .background(RoundedRectangle(cornerRadius: 10).fill(DS.Colors.surface1))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(DS.Colors.borderSubtle, lineWidth: 0.5))
+    }
+}
+
+private struct SettingsToggleRow: View {
+
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(RetroToggleStyle())
+        }
+        .padding(16)
+    }
+}
+
+private struct SettingsActionRow: View {
+
+    let title: String
+    let subtitle: String
+    let systemName: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(DS.Colors.textPrimary)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+
+                Spacer(minLength: 12)
+
+                Image(systemName: systemName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering in
@@ -181,57 +636,256 @@ struct SettingsPanelView: View {
     }
 }
 
-private enum SettingsTab: String, CaseIterable, Identifiable {
-    case account
-    case api
-    case model
-    case voice
-    case agents
-    case customization
-    case general
+@MainActor
+private struct SettingsPermissionTabView: View {
 
-    var id: String { rawValue }
+    let permission: LumaRequiredPermission
+    @ObservedObject var companionManager: CompanionManager
+    @State private var isGranted = false
 
-    var title: String {
-        switch self {
-        case .account:       return "Account"
-        case .api:           return "API"
-        case .model:         return "Model"
-        case .voice:         return "Voice"
-        case .agents:        return "Agents"
-        case .customization: return "Customization"
-        case .general:       return "General"
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionCard {
+                    HStack(spacing: 12) {
+                        Image(systemName: permissionIcon)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(isGranted ? DS.Colors.success : DS.Colors.warning)
+                            .frame(width: 28, height: 28)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(permission.displayName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(DS.Colors.textPrimary)
+                            Text(isGranted ? "Permission granted" : "Permission required for this feature")
+                                .font(.system(size: 11))
+                                .foregroundColor(DS.Colors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .foregroundColor(isGranted ? DS.Colors.success : DS.Colors.warning)
+                    }
+                    .padding(16)
+
+                    Divider().padding(.horizontal, 16)
+
+                    Button(isGranted ? "Open System Settings" : "Grant permission") {
+                        openPermissionSettings()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textOnAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(DS.Colors.accent))
+                    .padding(16)
+                    .onHover { isHovering in
+                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+
+                Text(permissionDescription)
+                    .font(.system(size: 12))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    refreshPermissionState()
+                } label: {
+                    Label("Refresh permission state", systemImage: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.accentText)
+                }
+                .buttonStyle(.plain)
+                .onHover { isHovering in
+                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 28)
+        }
+        .onAppear(perform: refreshPermissionState)
+        .onReceive(companionManager.objectWillChange) { _ in
+            refreshPermissionState()
         }
     }
 
-    var icon: String {
-        switch self {
-        case .account:       return "person.circle"
-        case .api:           return "key.horizontal"
-        case .model:         return "cpu"
-        case .voice:         return "waveform"
-        case .agents:        return "bubble.left.and.bubble.right"
-        case .customization: return "paintpalette"
-        case .general:       return "gearshape"
+    private var permissionIcon: String {
+        switch permission {
+        case .microphone: return "mic"
+        case .accessibility: return "accessibility"
+        case .screenRecording: return "record.circle"
         }
     }
 
-    var subtitle: String {
-        switch self {
-        case .account:
-            return "Manage your local identity and reset behavior."
-        case .api:
-            return "Configure API providers and connection profiles."
-        case .model:
-            return "Choose the active model for companion responses."
-        case .voice:
-            return "Adjust speech voice, pitch, rate, and volume."
-        case .agents:
-            return "Set agent limits, defaults, and agent-mode options."
-        case .customization:
-            return "Choose accent color and agent bubble appearance."
-        case .general:
-            return "Open logs, app preferences, and maintenance actions."
+    private var permissionDescription: String {
+        switch permission {
+        case .microphone:
+            return "Luma uses microphone access for push-to-talk and voice follow-ups."
+        case .accessibility:
+            return "Luma uses Accessibility access to inspect controls and point at the right place."
+        case .screenRecording:
+            return "Luma uses Screen Recording access to understand the screen during visual tasks."
+        }
+    }
+
+    private func refreshPermissionState() {
+        switch permission {
+        case .microphone:
+            isGranted = companionManager.hasMicrophonePermission
+        case .accessibility:
+            isGranted = companionManager.hasAccessibilityPermission
+        case .screenRecording:
+            isGranted = companionManager.hasScreenRecordingPermission
+        }
+    }
+
+    private func openPermissionSettings() {
+        switch permission {
+        case .accessibility:
+            WindowPositionManager.openAccessibilitySettings()
+        case .screenRecording:
+            WindowPositionManager.openScreenRecordingSettings()
+        case .microphone:
+            NSWorkspace.shared.open(permission.systemSettingsURL)
+        }
+    }
+}
+
+@MainActor
+private struct DictationSettingsTabView: View {
+
+    @ObservedObject var dictationManager: BuddyDictationManager
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionCard {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Transcription provider")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(DS.Colors.textPrimary)
+                            Text("The provider currently handling push-to-talk dictation.")
+                                .font(.system(size: 11))
+                                .foregroundColor(DS.Colors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Text(dictationManager.transcriptionProviderDisplayName)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(DS.Colors.accentText)
+                    }
+                    .padding(16)
+                }
+
+                SettingsSectionCard {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Push to talk")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(DS.Colors.textPrimary)
+                            Text("Hold Control + Option, speak, then release to submit.")
+                                .font(.system(size: 11))
+                                .foregroundColor(DS.Colors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Text("⌃ ⌥")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+                    .padding(16)
+                }
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 28)
+        }
+    }
+}
+
+private struct ShortcutsSettingsTabView: View {
+
+    private let shortcuts: [(String, String, String)] = [
+        ("Push to talk", "⌃ ⌥", "Hold to record a voice request."),
+        ("New agent", "⌃ ⌘ N", "Spawn a new background agent session."),
+        ("Cycle agents", "⌃ ⌥ Tab", "Move focus to the next active agent."),
+        ("Switch agent", "⌃ ⌥ 1–9", "Jump directly to an agent by position.")
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionCard {
+                    ForEach(Array(shortcuts.enumerated()), id: \.offset) { index, shortcut in
+                        HStack(spacing: 14) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(shortcut.0)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(DS.Colors.textPrimary)
+                                Text(shortcut.2)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(DS.Colors.textTertiary)
+                            }
+
+                            Spacer()
+
+                            Text(shortcut.1)
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundColor(DS.Colors.textSecondary)
+
+                            if index < shortcuts.count - 1 {
+                                EmptyView()
+                            }
+                        }
+                        .padding(16)
+
+                        if index < shortcuts.count - 1 {
+                            Divider().padding(.horizontal, 16)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 28)
+        }
+    }
+}
+
+@MainActor
+private struct CursorSettingsTabView: View {
+
+    @ObservedObject var companionManager: CompanionManager
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionCard {
+                    SettingsToggleRow(
+                        title: "Show Luma cursor",
+                        subtitle: "Keep the companion cursor visible while Luma is ready.",
+                        isOn: Binding(
+                            get: { companionManager.isLumaCursorEnabled },
+                            set: { companionManager.setLumaCursorEnabled($0) }
+                        )
+                    )
+                }
+
+                Text("Cursor color, shape, auto-hide timing, and bubble appearance are available under Advanced → Customization.")
+                    .font(.system(size: 12))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 28)
         }
     }
 }
