@@ -82,7 +82,7 @@ That's it. Luma auto-detects the CLI on launch. If it's installed, agents use it
 
 The easiest way to get Luma running. No Xcode, no terminal, no build steps.
 
-1. Go to the [Releases](https://github.com/Omoju-Mayowa/luma/releases) page on GitHub.
+1. Go to the [Releases](https://github.com/nox-codes/luma/releases) page on GitHub.
 2. Find the latest release and download the `.dmg` file under **Assets**.
 3. Open the downloaded `.dmg` file.
 4. Drag **Luma** into your **Applications** folder.
@@ -113,7 +113,7 @@ If you don't have Xcode installed:
 Open **Terminal** (search "Terminal" in Spotlight with `Cmd + Space`) and run:
 
 ```bash
-git clone https://github.com/Omoju-Mayowa/luma.git
+git clone https://github.com/nox-codes/luma.git
 cd luma
 open leanring-buddy.xcodeproj
 ```
@@ -267,7 +267,7 @@ A full autonomous multi-agent system built into the menu bar. Agents run indepen
 **Requirements:** macOS 14.0+, Apple Silicon or Intel Mac, Xcode 15+ (to build from source), an API key from any supported provider.
 
 ```bash
-git clone https://github.com/Omoju-Mayowa/luma.git
+git clone https://github.com/nox-codes/luma.git
 cd luma
 open leanring-buddy.xcodeproj
 ```
